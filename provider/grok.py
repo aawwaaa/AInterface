@@ -30,6 +30,9 @@ class Provider(metaclass=ProviderMetaclass):
             http_client=client,
         )
 
+        if API_KEY == "":
+            raise Exception("\n你需要为Grok设置API_KEY\n使用 -c 选项打开配置文件\n")
+
     def execute(self, options, on_thinking, on_outputing):
         # f = open("fakedata.txt", "w")
         try:
