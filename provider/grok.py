@@ -1,7 +1,6 @@
 import openai
+import traceback
 import json
-import os
-import requests  # 用于中断请求
 from threading import Event
 from provider import ProviderMetaclass  # 假设这个模块存在
 
@@ -18,8 +17,12 @@ REASONING_EFFORT = config.get_config("grok.reasoning_effort", "low", caster=lamb
 
 config.update_config()
 
+write_fake_data = False
+
 class Provider(metaclass=ProviderMetaclass):
     name = "grok"
+    # mode = "function_calling"
+    mode = "section_calling"
     
     def __init__(self):
         client = openai.DefaultHttpxClient(proxy=HTTP_PROXY) \
@@ -34,7 +37,8 @@ class Provider(metaclass=ProviderMetaclass):
             raise Exception("\n你需要为Grok设置API_KEY\n使用 -c 选项打开配置文件\n")
 
     def execute(self, options, on_thinking, on_outputing):
-        # f = open("fakedata.txt", "w")
+        if write_fake_data:
+            f = open("fakedata.txt", "w")
         try:
             # 使用自定义会话发送请求
             response = self.client.chat.completions.create(
@@ -47,15 +51,18 @@ class Provider(metaclass=ProviderMetaclass):
             for chunk in response:
                 choice = chunk.choices[0]
                 if hasattr(choice.delta, "reasoning_content"):
-                    # f.write("T:" + json.dumps(choice.delta.reasoning_content) + "\n")
+                    if write_fake_data:
+                        f.write("T:" + json.dumps(choice.delta.reasoning_content) + "\n")
                     on_thinking(choice.delta.reasoning_content)
                 elif hasattr(choice.delta, "content"):
-                    # f.write("C:" + json.dumps(choice.delta.content) + "\n")
+                    if write_fake_data:
+                        f.write("C:" + json.dumps(choice.delta.content) + "\n")
                     if choice.delta.content is not None:
                         on_outputing(choice.delta.content)
                 elif choice.finish_reason is not None:
-                    # f.write("F:" + json.dumps(choice.finish_reason) + "\n")
-                    # f.close()
+                    if write_fake_data:
+                        f.write("F:" + json.dumps(choice.finish_reason) + "\n")
+                        f.close()
                     return {"finishReason": choice.finish_reason}
                 else:
                     on_thinking("\nUnhandled chunk: " + str(chunk))
@@ -65,7 +72,8 @@ class Provider(metaclass=ProviderMetaclass):
             
         except InterruptedError:
             return {"finishReason": "interrupted"}
-        except Exception as e:
+        except Exception:
+            e = traceback.format_exc()
             return {"finishReason": f"Error: {str(e)}"}
         finally:
             self._current_session = None

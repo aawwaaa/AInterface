@@ -2,6 +2,7 @@ import requests
 import json
 import uuid
 import time
+import traceback
 import os
 import os.path as path
 import platformdirs
@@ -21,6 +22,7 @@ cache_file_name = path.join(platformdirs.user_cache_dir("AInterface"), "unlimite
 
 class Provider(metaclass=ProviderMetaclass):
     name = "unlimitedai"
+    mode = "section_calling"
 
     token = None
     token_expiry = 0
@@ -61,7 +63,8 @@ class Provider(metaclass=ProviderMetaclass):
                 elif chunk[0:2] == "e:":
                     return json.loads(chunk[2:])
             return {"finishReason": "Error: " + str(response.status_code)}
-        except Exception as e:
+        except Exception:
+            e = traceback.format_exc()
             if self.last_response is None:
                 return {"finishReason": "stop"}
             return {"finishReason": "Error: " + str(e)}

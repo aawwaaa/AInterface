@@ -42,7 +42,6 @@ def read_file(path):
     return {'result': content}
 
 def write_file(path, data):
-    os.makedirs('./data', exist_ok=True)
     with open(os.path.join(cwd, path), 'w', encoding='utf-8') as f:
         f.write(data)
     return {'result': True}
@@ -70,11 +69,11 @@ def remove_dir(path):
 
 def copy_file(src, dst):
     import shutil
-    shutil.copy2(os.path.join(cwd, src), os.path.join('./data/', dst))
+    shutil.copy2(os.path.join(cwd, src), os.path.join(cwd, dst))
     return {'result': True}
 
 def move_file(src, dst):
-    os.rename(os.path.join(cwd, src), os.path.join('./data/', dst))
+    os.rename(os.path.join(cwd, src), os.path.join(cwd, dst))
     return {'result': True}
 
 tools = [

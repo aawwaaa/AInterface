@@ -6,10 +6,10 @@ import websockets
 import threading
 import random
 import os
-import xmltodict
 import time
 
 import util.interact as interact
+from util.section import unparse
 import tool.fsop as fsop
 import config as config
 
@@ -197,25 +197,32 @@ def add_to_platform_if_has(name, danger_stdin = False, args = ''):
 
 def pull_stdout():
     global process_operation
+    duration = 0
+    ret = ''
     if process_operation:
         process_operation = False
-        interact.output_output("\n\n* Waiting for stdout...")
-        time.sleep(config.stdout_timeout)
-    ret = ""
-    removes = []
-    for process in subprocesses.values():
-        stdout = process.pull_stdout()
-        if stdout:
-            ret += xmltodict.unparse({
-                'stdout': {
-                    'process_id': process.id,
-                    'data': stdout
-                }
-            })
-        if process.removed:
-            removes.append(process)
-    for process in removes:
-        del subprocesses[process.id]
+        duration = time.time() + config.stdout_timeout
+    def loop(check):
+        nonlocal ret, duration
+        while True:
+            if check():
+                return
+            removes = []
+            for process in subprocesses.values():
+                stdout = process.pull_stdout()
+                if stdout:
+                    ret += unparse("stdout", "[" + str(process.id) + "] " \
+                        + process.command, {
+                            'data': stdout
+                        }, end="stdout_end")
+                    duration = time.time() + config.stdout_timeout
+                if process.removed:
+                    removes.append(process)
+            for process in removes:
+                del subprocesses[process.id]
+            if time.time() > duration:
+                return
+    interact.breakable_process("拉取stdout中...", loop)
     return ret
 
 platform = []
@@ -318,9 +325,9 @@ tools = [
     },
     {
         'name': 'stdin_write',
-        'description': 'Write to stdin to selected process, THE PARAM DATA IS RAW',
+        'description': 'Write to stdin to selected process',
         'args': {
-            'data': 'string',
+            'data': 'string|It is RAW DATA',
             'append_ln': 'bool?'
         },
         'func': stdin_write

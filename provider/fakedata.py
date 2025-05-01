@@ -1,10 +1,13 @@
 import json
 import time
+import traceback
 from provider import ProviderMetaclass
 import config
 
 class Provider(metaclass=ProviderMetaclass):
     name = "fakedata"
+    mode = "section_calling"
+
     def execute(self, options, on_thinking, on_outputing):
         try:
             f = open("fakedata.txt", "r", encoding="utf-8")
@@ -19,11 +22,9 @@ class Provider(metaclass=ProviderMetaclass):
                     return {"finishReason": json.loads(chunk[2:])}
             f.close()
             return {"finishReason": "stop"}
-        except Exception as e:
-            if self.last_response is None:
-                return {"finishReason": "stop"}
+        except Exception:
+            e = traceback.format_exc()
             return {"finishReason": "Error: " + str(e)}
     def interrupt(self):
-        self.last_response.close()
-        self.last_response = None
+        pass
     

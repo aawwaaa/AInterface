@@ -4,20 +4,24 @@ import xmltodict
 class Messages:
     def __init__(self):
         self.messages = []
-        self.message_chars = []
+        self.tool_results = []
 
-    def add_message(self, role, message, message_chars = None):
+    def add_message(self, role, message):
         self.messages.append({
             "id": uuid.uuid4().hex,
             "role": role,
             "content": message
         })
-        if message_chars is None:
-            message_chars = [message]
-        self.message_chars.append(message_chars)
+
+    def add_tool_result(self, results):
+        self.tool_results += [results]
 
     def get_messages(self):
         return self.messages
+
+    def get_tool_result(self, index):
+        return self.tool_results[index] \
+            if index < len(self.tool_results) else None
 
     def save_session(self):
         output = []
@@ -27,13 +31,26 @@ class Messages:
             message = self.messages[index]
             output.append(message["id"])
             output.append(message["role"])
-            output.append('\u200b'.join(self.get_chars(index)))
+            output.append(message["content"])
             output.append(split)
-        return '\n'.join(output)
+        string = '\n'.join(output)
+        output = ['']
+        subsplit = '-----' + uuid.uuid4().hex + '-----'
+        output.append("tool_results")
+        output.append(subsplit)
+        for result in self.tool_results:
+            for key in result:
+                output.append(key)
+                output.append(str(result[key]))
+                output.append(subsplit)
+            output.append(split)
+        string += '\n'.join(output)
+        return string
 
-    def load_session(self, iterator):
+    def load_session(self, iterable):
         self.messages = []
-        self.message_chars = []
+        self.tool_results = []
+        iterator = iter(iterable)
         split = None
         id = None
         role = None
@@ -46,6 +63,8 @@ class Messages:
                 continue
             if id is None:
                 id = line
+                if id == "tool_results":
+                    break
                 continue
             if role is None:
                 role = line
@@ -55,14 +74,33 @@ class Messages:
                 self.messages.append({
                     "id": id,
                     "role": role,
-                    "content": string.replace('\u200b', '')
+                    "content": string
                 })
-                self.message_chars.append(string.split('\u200b'))
                 id = None
                 role = None
                 buffer = []
                 continue
             buffer.append(line)
-
-    def get_chars(self, index):
-        return self.message_chars[index]
+        buffer = []
+        result = {}
+        subsplit = None
+        key = None
+        for line in iterator:
+            if line.endswith('\n'):
+                line = line[:-1]
+            if subsplit is None:
+                subsplit = line
+                continue
+            if line == subsplit:
+                result[key] = '\n'.join(buffer)
+                key = None
+                buffer = []
+                continue
+            if line == split:
+                self.tool_results.append(result)
+                result = {}
+                continue
+            if key is None:
+                key = line
+                continue
+            buffer.append(line)

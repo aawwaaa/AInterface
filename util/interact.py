@@ -777,7 +777,7 @@ def breakable_process(label, func) -> None:
     
     enter_layer("处理", COLOR_GREEN, label)
     output("打断? ")
-    output("[c]", color=COLOR_CYAN)
+    output("[c]         ", color=COLOR_CYAN)
 
     def clear():
         exit_layer()
@@ -913,7 +913,7 @@ def tool_using(name: str, args: Dict[str, str]):
     
     exit_layer()
 
-def tool_using_result(name: str, result: Dict[str, str]):
+def tool_using_result(result: Dict[str, str]):
     """Display tool result"""
     global current_layer
     
@@ -936,7 +936,7 @@ def tool_using_result(name: str, result: Dict[str, str]):
     
     exit_layer()
 
-def tool_using_error(name: str, error: str):
+def tool_using_error(error: str):
     """Display tool error"""
     output_error(error)
 
@@ -968,34 +968,22 @@ def init_stdscr(stdscr1):
     stdscr.idlok(1)
     curses.mousemask(curses.ALL_MOUSE_EVENTS | curses.REPORT_MOUSE_POSITION)
     init_colors()
-    pad = curses.newpad(config.history_length, 100)
+    pad = curses.newpad(config.history_length, 200)
     pad.scrollok(1)
     init_status_bar()
     init_progress_bar()
     update_windows()
 
-PREDICT_CALL = r"<predict>[\s\S\n]*?</predict>"
-THOUGHT = r"<thought>[\s\S\n]*?</thought>"
+PREDICT = r"\u00a7predict\|?\u00a7(\n\u00a7\.[0-9]+\|?\u00a7.+)+(\n\u00a7predict_end\u00a7)?"
 
-def handle_predict(message):
+def handle_predict(section, message):
     global predicts
-    match = re.search(THOUGHT, message)
-    if not match:
-        thought = ""
-    else:
-        thought = message[match.start():match.end()]
-        message = message[0:match.start()] + message[match.end():]
-    match = re.search(PREDICT_CALL, message)
+    predicts = []
+    for index in section.subsections:
+        predicts.append(section.subsections[index])
+    show_predicts()
+    match = re.search(PREDICT, message)
     if not match:
         return message
-    xml = message[match.start():match.end()]
-    message = thought + message[0:match.start()] + message[match.end():]
-    try:
-        obj = xmltodict.parse(xml)["predict"]
-    except Exception:
-        obj = {}
-    predicts = []
-    for index in obj:
-        predicts.append(obj[index])
-    show_predicts()
+    message = message[:match.start()] + message[match.end():]
     return message
