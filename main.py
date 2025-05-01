@@ -9,6 +9,7 @@ import pyfiglet
 import time
 import re
 import argparse
+import math
 
 import tool.base
 import tool.fsop
@@ -17,7 +18,7 @@ from provider import ProviderMetaclass
 from util.interact import get_user_input, output_thinking, \
     output_normal, output_output, output_error, init_stdscr, \
     set_length_bar_value, is_required_interrupt, remove_required_interrupt, \
-    set_save_session_implement, handle_predict
+    set_save_session_implement, handle_predict, output_input
 from util.messages import Messages
 from util.tools import Tools
 import config
@@ -30,9 +31,13 @@ tools.import_tools("base", tool.base.tools)
 tools.import_tools("fsop", tool.fsop.tools)
 tools.import_tools("subprocess", tool.subprocess.tools)
 
+args = {}
+
 def init():
+    global args
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", action="store_true", help="通过编辑器打开配置文件")
+    parser.add_argument("exported_file", action="store", nargs="?", help="打开导出的记录")
     args = parser.parse_args()
 
     if args.config:
@@ -50,7 +55,7 @@ Output <tool><name>TOOL_NAME</name><arg1>ARG1...</arg1><arg2>ARG2...</arg2>...</
 with XML syntax and escaping when using tool.
 Call proper tools when needed according to the user's statement with actual args.
 """ + #As parallel as possible, such as use as many tools once as possible.
-"""MUST output the important thinking in every output by <thought><plan>value</plan>...</thought>, including: your plan, thought \
+"""MUST output the important thinking in every output by <thought><plan>value</plan>...</thought>, including: your plan, analysis \
 and important things.
 Note: You can use multi tools in one output complexed with normal output.
 NOTICE: REUSE the shell you opened before as much as possible.
@@ -59,12 +64,12 @@ The message presented to the user MUST be outputed by '<output>...</output>'.
 Append some predicts about the statement of the user \
 according to the context by <predict><predict1>...</predict1><predict2>...</predict2>...</predict> \
 WITH ONLY direct command such as <predict><predict1>列出所有文件</predict1><predict2>讲个笑话</predict2>...</predict>.
-You MUST use XML escape when outputing ANY TEXT content, but '\\n' MUST be used DIRECTLY.
+You MUST use ONLY XML escape when outputing ANY TEXT content, but without `<br/>`.
 Use Chinese to talk with user.""")
 
-    if len(argv) > 1:
-        with open(argv[1], "r") as f:
-            messages.load_session('\n'.join(f.readlines()))
+    if args.exported_file:
+        with open(args.exported_file, "r") as f:
+            messages.load_session(f.readlines())
             messages.add_message("system", f"This session is loaded from a file, ALL the processes ARE LOST!")
             global message_length_sum
             message_length_sum = sum([len(message["content"]) for message in messages.get_messages()])
@@ -74,10 +79,21 @@ Use Chinese to talk with user.""")
 def main(stdscr):
     global message_length_sum
     init_stdscr(stdscr)
-    output_output(pyfiglet.figlet_format("AInterface"))
-    if len(argv) > 1:
-        output_output(f"已从文件 {argv[1]} 载入会话\n")
-    output_output("使用`!`输入系统指令,使用`!!`继续输出\n")
+    if args.exported_file:
+        index = 0
+        for message in messages.get_messages():
+            if message["role"] == "assistant":
+                for chars in messages.get_chars(index):
+                    handle_output(chars, handle_tools=False)
+                handle_output('', dump_all=True, handle_tools=False)
+                reset_response()
+            elif message["role"] == "user":
+                output_input(message["content"])
+            index += 1
+        output_output(f"已从文件 {args.exported_file} 载入会话\n")
+    else:
+        output_output(pyfiglet.figlet_format("AInterface"))
+        output_output("使用`!`输入系统指令,使用`!!`继续输出\n")
     while True:
         command = get_user_input(embed=False, label="<= " + tool.fsop.get_cwd_str())
         message_length_sum += len(command)
@@ -93,7 +109,7 @@ def main(stdscr):
         request_loop()
 
 def save_session_implement():
-    filename = "session-" + time.strftime("%Y%m%d%H%M%S") + ".xml"
+    filename = "session-" + time.strftime("%Y%m%d%H%M%S") + ".session.txt"
     with open(filename, "w") as f:
         f.write(messages.save_session())
     return filename
@@ -110,6 +126,7 @@ XML_ESCAPES = {
 response = ""
 response_buffer = ""
 message = ""
+message_chars = []
 outputed = ""
 message_cache = []
 message_unescaped = ""
@@ -131,9 +148,10 @@ def reset_response():
     global response
     response = ""
 @interrupt_wrapper
-def handle_output(chars, dump_all = False):
+def handle_output(chars, dump_all = False, handle_tools=True):
     global response, message, has_normal, has_output, tool_results, message_length_sum
     message += chars
+    message_chars.append(chars)
     message_length_sum += len(chars)
     set_length_bar_value(message_length_sum)
     global message_cache, outputed, message_unescaped
@@ -150,9 +168,6 @@ def handle_output(chars, dump_all = False):
             message_unescaped = message_unescaped[match.end():]
             message_cache.append((escaped, message_unescaped[:match.end()]
                                   .replace("\x01", "<").replace("\x02", ">")))
-        message_cache.append((message_unescaped, message_unescaped
-                              .replace("\x01", "<").replace("\x02", ">")))
-        message_unescaped = ""
 
     while len(message_cache) > 5 or dump_all:
         if len(message_cache) == 0:
@@ -162,9 +177,10 @@ def handle_output(chars, dump_all = False):
         outputed += part[0]
         outputed = outputed[-30:]
         response += part[1]
-
-        response, result = tools.handle_tools(response)
-        tool_results += result
+        
+        if handle_tools:
+            response, result = tools.handle_tools(response)
+            tool_results += result
 def write_output(part, out, next_output):
     global response, has_output, tool_results, message_length_sum
     global outputing_predict, outputing_output, outputing_thought
@@ -188,6 +204,8 @@ def write_output(part, out, next_output):
 
     part = part.replace("\x01", "<").replace("\x02", ">")
 
+    # if outputing_thought:
+    #     output_thinking(part)
     if outputing_output:
         if not has_output:
             has_output = True
@@ -214,7 +232,7 @@ def write_output(part, out, next_output):
     
 def request_loop():
     global message, has_normal, has_output, response, message_length_sum, tool_results
-    global outputed, outputing_predict, outputing_output, outputing_thought
+    global outputed, outputing_predict, outputing_output, outputing_thought, message_chars
     tool_results += tool.subprocess.pull_stdout()
     if tool_results:
         message_length_sum += len(tool_results)
@@ -223,6 +241,7 @@ def request_loop():
     set_length_bar_value(message_length_sum)
     while True:
         message = ""
+        message_chars = []
         outputed = ""
         has_normal = False
         has_output = False
@@ -234,7 +253,7 @@ def request_loop():
         }, interrupt_wrapper(output_thinking), handle_output)
         handle_output('', dump_all=True)
         message = handle_predict(message)
-        messages.add_message("assistant", message)
+        messages.add_message("assistant", message, message_chars)
         if finish["finishReason"] != "stop":
             output_error("\nTerminated: " + finish["finishReason"])
             break

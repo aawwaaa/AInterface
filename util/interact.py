@@ -7,6 +7,7 @@ import time
 import platformdirs
 import os
 import os.path as path
+import math
 from wcwidth import wcswidth
 from typing import List, Dict, Union, Optional, Tuple
 
@@ -28,9 +29,15 @@ log_file_name = path.join(platformdirs.user_cache_dir("AInterface"), "log.txt")
 
 # Global variables
 stdscr = None
+pad = None
+pad_bottom = 0
+pad_scroll = -1
+curs_enabled = True
 inserted = False
 current_layer = 0
 layer_stack = []
+progress_bar = None
+progress_bar_height = 1
 status_bar = None
 status_bar_height = 2
 last_output_type = None  # 'thinking', 'normal', 'output', None
@@ -98,8 +105,11 @@ def remove_required_interrupt():
     required_interrupt = False
 
 def scroll_line():
-    stdscr.scroll(1)
-    stdscr.move(max_y - 1, 0)
+    global pad_scroll
+    pad.scroll(1)
+    pad.move(max_y - 1, 0)
+    if pad_scroll != -1:
+        pad_scroll = max(0, pad_scroll - 1)
 
 def log_to_file(output):
     if not config.logging:
@@ -113,32 +123,40 @@ def init_colors():
     
     # Define color pairs (foreground, background)
     curses.init_pair(COLOR_CYAN, 51, -1)
-    curses.init_pair(COLOR_YELLOW, curses.COLOR_YELLOW, -1)
-    curses.init_pair(COLOR_GRAY, 8, -1)  # Gray is often color 8
-    curses.init_pair(COLOR_ORANGE, 202, -1)  # Orange is often color 202
-    curses.init_pair(COLOR_DARKCYAN, 6, -1)  # Darker cyan
+    curses.init_pair(COLOR_YELLOW, 226, -1)
+    curses.init_pair(COLOR_GRAY, 244, -1)
+    curses.init_pair(COLOR_ORANGE, 214, -1)
+    curses.init_pair(COLOR_DARKCYAN, 31, -1)
     curses.init_pair(COLOR_WHITE, curses.COLOR_WHITE, -1)
     curses.init_pair(COLOR_SCARLET, 9, -1)  # Scarlet/red
-    curses.init_pair(COLOR_MAGENTA, curses.COLOR_MAGENTA, -1)
-    curses.init_pair(COLOR_GREEN, curses.COLOR_GREEN, -1)
+    curses.init_pair(COLOR_MAGENTA, 164, -1)
+    curses.init_pair(COLOR_GREEN, 46, -1)
 
 def is_show_internal() -> bool:
     """Control whether to show thinking and call outputs"""
     return config.show_internal
 
 def init_status_bar():
-    """Initialize the status bar with pure white"""
-    global status_bar, max_y, max_x
+    global status_bar
     max_y, max_x = stdscr.getmaxyx()
     status_bar = curses.newwin(status_bar_height, max_x, max_y - status_bar_height, 0)
     status_bar.refresh()
 
+def init_progress_bar():
+    global progress_bar
+    max_y, max_x = stdscr.getmaxyx()
+    progress_bar = curses.newwin(progress_bar_height, max_x, 0, 0)
+    progress_bar.refresh()
+
+def update_windows():
+    update_status_bar()
+    update_progress_bar()
+
 def update_status_bar():
     """Update the status bar (no operation for now)"""
-    global status_bar, max_y, max_x
+    global status_bar
     max_y, max_x = stdscr.getmaxyx()
-    curses.curs_set(0)
-    y, x = get_current_position()
+    y, x = stdscr.getyx()
     status_bar.clear()
     status_bar.addstr(0, 0, ' ' * max_x)
     if announce_duration > time.time():
@@ -160,10 +178,26 @@ def update_status_bar():
 
     shortkey_str += get_shortkey_str()
 
-    status_bar.addstr(0, 0, shortkey_str, curses.color_pair(COLOR_YELLOW))
+    status_bar.addstr(0, 0, shortkey_str[:max_x], curses.color_pair(COLOR_YELLOW))
 
     status_bar.refresh()
-    move_to_position(y, x)
+    stdscr.move(y, x)
+
+def update_progress_bar():
+    """Update the progress bar (no operation for now)"""
+    global progress_bar
+    max_y, max_x = stdscr.getmaxyx()
+    pad_max_y = pad.getmaxyx()[0]
+    y, x = stdscr.getyx()
+    progress_bar.clear()
+    filled = math.ceil(pad_bottom / pad_max_y * (max_x-1))
+    progress_bar.addstr(0, 0, '-' * (max_x - 1), curses.color_pair(COLOR_GRAY))
+    progress_bar.addstr(0, 0, '-' * filled, curses.color_pair(COLOR_CYAN))
+    pad_scroll_1 = pad_scroll if pad_scroll != -1 else pad_bottom
+    scroll = int(pad_scroll_1 / pad_max_y * (max_x-1))
+    progress_bar.addstr(0, scroll, '|', curses.color_pair(COLOR_YELLOW))
+    progress_bar.refresh()
+    stdscr.move(y, x)
 
 def announce(text):
     global announce_text, announce_duration
@@ -175,23 +209,80 @@ def set_length_bar_value(value):
     length_bar_value = value
 
 def get_current_position() -> Tuple[int, int]:
-    """Get the current cursor position in the main window"""
-    return stdscr.getyx()
+    """Get the current cursor position in the pad window"""
+    return pad.getyx()
 
 def move_to_position(y: int, x: int):
-    """Move cursor to specified position in main window"""
+    """Move cursor to specified position in pad window"""
+    global pad_bottom
     try:
-        stdscr.move(y, x)
+        pad.move(y, x)
+        pad_bottom = max(y, pad_bottom)
     except curses.error:
         # Handle edge cases where position might be out of bounds
-        max_y, max_x = stdscr.getmaxyx()
-        stdscr.move(min(y, max_y-1), min(x, max_x-1))
+        max_y, max_x = pad.getmaxyx()
+        pad.move(min(y, max_y-1), min(x, max_x-1))
+        pad_bottom = max(min(y, max_y-1), pad_bottom)
+
+def handle_pad_scroll_delta(delta):
+    global pad_scroll
+    max_y, max_x = stdscr.getmaxyx()
+    max_y -= status_bar_height + progress_bar_height
+    if pad_scroll == -1:
+        pad_scroll = pad_bottom - max_y + 1
+    pad_scroll += delta
+    if pad_scroll < 0:
+        pad_scroll = 0
+    if pad_scroll > pad_bottom - max_y + 1:
+        pad_scroll = -1
+
+def handle_pad_scroll_key(key):
+    if key == curses.KEY_MOUSE:
+        _, x, y, _, bstate = curses.getmouse()
+        if bstate & curses.BUTTON4_PRESSED:
+            handle_pad_scroll_delta(-5)
+            refresh()
+            return True
+        elif bstate & curses.BUTTON5_PRESSED:
+            handle_pad_scroll_delta(5)
+            refresh()
+            return True
+    return False
+
+def refresh():
+    """Refresh the pad window"""
+    max_y, max_x = stdscr.getmaxyx()
+    max_y -= status_bar_height + progress_bar_height + 1
+    if pad_scroll == -1:
+        top = max(pad_bottom - max_y, 0)
+    else:
+        top = min(max(0, pad_scroll), pad_bottom)
+    pad.refresh(
+        top, 0,
+        progress_bar_height, 0,
+        max_y, max_x - 1
+    )
+    cursor_y, cursor_x = get_current_position()
+    cursor_y -= top
+    cursor_y += progress_bar_height
+    if 0 <= cursor_y <= max_y and curs_enabled:
+        curses.curs_set(1)
+        stdscr.move(cursor_y, cursor_x)
+    else:
+        curses.curs_set(0)
+    stdscr.refresh()
+
+def get_max_yx() -> Tuple[int, int]:
+    """Get the maximum y and x coordinates of the pad window"""
+    max_x = stdscr.getmaxyx()[1]
+    y, x = pad.getmaxyx()
+    return y, min(x, max_x)
 
 # '''
-def output(chars: str, *, color = COLOR_WHITE, pad = '|  '):
+def output(chars: str, *, color = COLOR_WHITE, prefix = '|  '):
     """Output content at the current layer, supporting line breaks and appending to current position"""
-    global current_layer, content_start_y, cursor_pos_stored
-    max_y, max_x = stdscr.getmaxyx()
+    global current_layer, content_start_y, cursor_pos_stored, pad_bottom
+    max_y, max_x = get_max_yx()
     current_y, current_x = get_current_position()
     
     lines = chars.split('\n')
@@ -200,7 +291,7 @@ def output(chars: str, *, color = COLOR_WHITE, pad = '|  '):
             # For new lines after the first one, move to next line
             current_y += 1
             current_x = 0
-            while current_y >= max_y - status_bar_height - 2:
+            while current_y >= max_y - 1:
                 # Scroll up if we're at the bottom
                 scroll_line()
                 cursor_pos_stored = (cursor_pos_stored[0] - 1,
@@ -208,12 +299,12 @@ def output(chars: str, *, color = COLOR_WHITE, pad = '|  '):
                 current_y = max(0, current_y - 1)
             indent_width = current_layer * 4
             indent = " |  " * (current_layer - 1) + " "
-            stdscr.addstr(current_y, 0, f"{indent}{pad}")
-            log_to_file(f"\n{indent}{pad}")
+            pad.addstr(current_y, 0, f"{indent}{prefix}")
+            log_to_file(f"\n{indent}{prefix}")
             current_x = indent_width
             
         while len(line) > 0:
-            while current_y >= max_y - status_bar_height - 2:
+            while current_y >= max_y - 1:
                 # Scroll up if we're at the bottom
                 scroll_line()
                 cursor_pos_stored = (cursor_pos_stored[0] - 1,
@@ -242,23 +333,26 @@ def output(chars: str, *, color = COLOR_WHITE, pad = '|  '):
             # Add layer indentation if at start of line
             if current_x == 0:
                 indent = " |  " * (current_layer - 1) + " "
-                stdscr.addstr(current_y, 0, f"{indent}{pad}")
-                log_to_file(f"\n{indent}{pad}")
+                pad.addstr(current_y, 0, f"{indent}{prefix}")
+                log_to_file(f"\n{indent}{prefix}")
                 current_x = indent_width
             
             # Add the content at current position
-            stdscr.addstr(current_y, current_x, chunk, curses.color_pair(color))
+            pad.addstr(current_y, current_x, chunk, curses.color_pair(color))
             log_to_file(chunk)
             current_x += wcswidth(chunk)
     
     # Move cursor to final position
     move_to_position(current_y, current_x)
-    stdscr.refresh()
-    update_status_bar()
+    refresh()
+    update_windows()
     stdscr.nodelay(1)
     key = stdscr.getch()
     if key != -1:
-        handle_shortkey(key)
+        if handle_pad_scroll_key(key):
+            pass
+        else:
+            handle_shortkey(key)
     stdscr.nodelay(0)
 # '''
 
@@ -271,28 +365,31 @@ def output(chars: str, *, color = COLOR_WHITE, pad = '|  '):
 
 def enter_layer(name: str, color: int, label: str):
     """Enter a new layer"""
-    global current_layer, layer_stack, inserted
+    global current_layer, layer_stack, inserted, pad_bottom, max_y, max_x
+    max_y, max_x = get_max_yx()
     
     # Save current cursor position
     current_y, current_x = get_current_position()
     
     # Output the layer header
     indent = " |  " * current_layer
-    stdscr.addstr("\n")
+    if current_y != 0:
+        pad.addstr("\n")
     current_y, current_x = get_current_position()
-    if current_y >= max_y - status_bar_height - 2:
+    if current_y >= max_y - 1:
         scroll_line()
         current_y = max(0, current_y - 1)
-    stdscr.addstr(current_y, 0, f"{indent}[")
-    stdscr.addstr(name, curses.color_pair(color))
-    stdscr.addstr(f"] {label}\n")
+        pad_bottom = max(current_y, pad_bottom)
+    pad.addstr(current_y, 0, f"{indent}[")
+    pad.addstr(name, curses.color_pair(color))
+    pad.addstr(f"] {label}\n")
     log_to_file(f"\n{indent}[{name}] {label}\n")
     
     # Update layer tracking
     current_layer += 1
     layer_stack.append((name, color, label))
     
-    stdscr.refresh()
+    refresh()
     inserted = True
 
 def exit_layer():
@@ -303,7 +400,7 @@ def exit_layer():
         current_layer -= 1
         layer_stack.pop()
     
-    stdscr.refresh()
+    refresh()
 
 def get_user_input(embed: bool = True, label = "") -> str:
     """Get multi-line user input with proper formatting, supporting Chinese input"""
@@ -318,7 +415,7 @@ def get_user_input(embed: bool = True, label = "") -> str:
     lines = [""]
     current_line = 0
     current_pos = 0  # Current cursor position within the line
-    max_y, max_x = stdscr.getmaxyx()
+    max_y, max_x = get_max_yx()
     input_start_y, _ = get_current_position()
     indent = " |  " * (current_layer - 1) + " "
     
@@ -363,11 +460,13 @@ def get_user_input(embed: bool = True, label = "") -> str:
     
     def check_scroll(y):
         nonlocal input_start_y
-        if y >= max_y - status_bar_height - 2:
-            while y >= max_y - status_bar_height - 2:
+        global pad_bottom
+        if y >= max_y - 1:
+            while y >= max_y - 1:
                 input_start_y -= 1
                 scroll_line()
                 y -= 1
+        pad_bottom = max(y, pad_bottom)
 
     def redraw_input():
         nonlocal input_start_y
@@ -377,8 +476,8 @@ def get_user_input(embed: bool = True, label = "") -> str:
         # Clear the input area
         for i in range(len(wrapped_lines_info) + 1):
             check_scroll(input_start_y + i)
-            stdscr.move(input_start_y + i, 0)
-            stdscr.clrtoeol()
+            move_to_position(input_start_y + i, 0)
+            pad.clrtoeol()
         
         # Calculate wrapped lines info
         calculate_wrapped_lines()
@@ -394,11 +493,11 @@ def get_user_input(embed: bool = True, label = "") -> str:
             if is_first_segment:
                 prefix_char = '>' if line_idx == 0 else '.'
                 prefix += "|"
-                stdscr.addstr(input_start_y + i, 0, prefix, curses.color_pair(COLOR_WHITE))
-                stdscr.addstr(input_start_y + i, len(prefix), prefix_char + ' ', curses.color_pair(COLOR_CYAN))
+                pad.addstr(input_start_y + i, 0, prefix, curses.color_pair(COLOR_WHITE))
+                pad.addstr(input_start_y + i, len(prefix), prefix_char + ' ', curses.color_pair(COLOR_CYAN))
             else:
                 prefix += "|  "
-                stdscr.addstr(input_start_y + i, 0, prefix, curses.color_pair(COLOR_WHITE))
+                pad.addstr(input_start_y + i, 0, prefix, curses.color_pair(COLOR_WHITE))
             
             # Draw the text segment
             text_segment = lines[line_idx][start_pos:end_pos]
@@ -408,16 +507,16 @@ def get_user_input(embed: bool = True, label = "") -> str:
                 comp_end = min(end_pos, current_pos)
                 if comp_start < comp_end:
                     # Draw text before composition
-                    stdscr.addstr(text_segment[:comp_start-start_pos])
+                    pad.addstr(text_segment[:comp_start-start_pos])
                     # Draw composition text with highlight
-                    stdscr.addstr(text_segment[comp_start-start_pos:comp_end-start_pos], 
+                    pad.addstr(text_segment[comp_start-start_pos:comp_end-start_pos], 
                                 curses.A_REVERSE)
                     # Draw text after composition
-                    stdscr.addstr(text_segment[comp_end-start_pos:])
+                    pad.addstr(text_segment[comp_end-start_pos:])
                 else:
-                    stdscr.addstr(text_segment)
+                    pad.addstr(text_segment)
             else:
-                stdscr.addstr(text_segment)
+                pad.addstr(text_segment)
         
         # Position the cursor correctly
         cursor_wrapped_line = 0
@@ -436,14 +535,14 @@ def get_user_input(embed: bool = True, label = "") -> str:
         
         try:
             prefix_len = len(indent) + 3  # "|> " or "|. " or "|  "
-            stdscr.move(
+            move_to_position(
                 input_start_y + cursor_wrapped_line,
                 prefix_len + cursor_pos_in_wrapped
             )
         except curses.error:
-            stdscr.move(max_y - status_bar_height - 2, max_x - 1)
-        stdscr.refresh()
-        update_status_bar()
+            move_to_position(max_y - 1, max_x - 1)
+        refresh()
+        update_windows()
     
     redraw_input()  # Initial draw to show prompt
 
@@ -457,8 +556,9 @@ def get_user_input(embed: bool = True, label = "") -> str:
         return current_wrapped_idx, line_idx, start_pos, end_pos
     
     while True:
-        update_status_bar()
-        curses.curs_set(1)
+        update_windows()
+        global curs_enabled
+        curs_enabled = True
         key = stdscr.getch()
         
         if composing:
@@ -491,7 +591,9 @@ def get_user_input(embed: bool = True, label = "") -> str:
                 redraw_input()
                 continue
         
-        if key == curses.KEY_UP:
+        if handle_pad_scroll_key(key) or key == curses.KEY_MOUSE:
+            pass
+        elif key == curses.KEY_UP:
             current_wrapped_idx, line_idx, start_pos, end_pos = get_current_wrapped_line()
             if current_wrapped_idx is not None and current_wrapped_idx > 0:
                 prev_line_idx, prev_start, prev_end, _, _ = wrapped_lines_info[current_wrapped_idx - 1]
@@ -613,7 +715,7 @@ def get_user_input(embed: bool = True, label = "") -> str:
             handle_shortkey(key)
         
         # Check if we need to scroll vertically
-        if input_start_y + len(wrapped_lines_info) >= max_y - status_bar_height - 2:
+        if input_start_y + len(wrapped_lines_info) >= max_y - 1:
             input_start_y = max(0, input_start_y - 1)
             redraw_input()
     
@@ -739,6 +841,23 @@ def output_normal(chars: str):
     
     last_output_type = 'normal'
 
+def output_input(chars: str):
+    global last_output_type, current_layer, inserted
+    
+    if last_output_type != 'input':
+        if last_output_type is not None:
+            exit_layer()
+        enter_layer("输入", COLOR_CYAN, "")
+        output(f"{chars}")
+        inserted = False
+    else:
+        if inserted:
+            inserted = False
+            output("\n")
+        output(f"{chars}")
+    
+    last_output_type = 'input'
+
 def output_output(chars: str):
     """Output content with proper formatting (always shown)"""
     global last_output_type, current_layer, inserted
@@ -773,9 +892,9 @@ def tool_using(name: str, args: Dict[str, str]):
     first_line = True
     for arg_name, arg_value in args.items():
         if not first_line:
-            output("\n", pad="|- ")
+            output("\n", prefix="|- ")
         first_line = False
-        output(arg_name, color=COLOR_GREEN, pad="|- ")
+        output(arg_name, color=COLOR_GREEN, prefix="|- ")
         arg_value = str(arg_value)
         if '\n' in arg_value:
             # Multi-line argument
@@ -796,9 +915,9 @@ def tool_using_result(name: str, result: Dict[str, str]):
     first_line = True
     for key, value in result.items():
         if not first_line:
-            output("\n", pad="|- ")
+            output("\n", prefix="|- ")
         first_line = False
-        output(key, color=COLOR_ORANGE, pad="|- ")
+        output(key, color=COLOR_ORANGE, prefix="|- ")
         value = str(value)
         if '\n' in value:
             # Multi-line result
@@ -832,17 +951,21 @@ def show_predicts():
     exit_layer()
 
 def init_stdscr(stdscr1):
-    global stdscr
+    global stdscr, pad, curs_enabled
     
     stdscr = stdscr1
     
-    curses.curs_set(1)  # Make cursor visible
+    curs_enabled = True
     stdscr.clear()
     stdscr.scrollok(1)
     stdscr.idlok(1)
+    curses.mousemask(curses.ALL_MOUSE_EVENTS | curses.REPORT_MOUSE_POSITION)
     init_colors()
+    pad = curses.newpad(config.history_length, 100)
+    pad.scrollok(1)
     init_status_bar()
-    update_status_bar()
+    init_progress_bar()
+    update_windows()
 
 PREDICT_CALL = r"<predict>[\s\S\n]*?</predict>"
 

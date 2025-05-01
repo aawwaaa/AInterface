@@ -49,9 +49,10 @@ class Provider(metaclass=ProviderMetaclass):
                 if hasattr(choice.delta, "reasoning_content"):
                     # f.write("T:" + json.dumps(choice.delta.reasoning_content) + "\n")
                     on_thinking(choice.delta.reasoning_content)
-                elif hasattr(choice.delta, "content") and choice.delta.content is not None:
+                elif hasattr(choice.delta, "content"):
                     # f.write("C:" + json.dumps(choice.delta.content) + "\n")
-                    on_outputing(choice.delta.content)
+                    if choice.delta.content is not None:
+                        on_outputing(choice.delta.content)
                 elif choice.finish_reason is not None:
                     # f.write("F:" + json.dumps(choice.finish_reason) + "\n")
                     # f.close()

@@ -89,5 +89,8 @@ console_window_command = get_config("base.console_window_command",
 stdout_timeout = get_config("base.stdout_timeout", 5, caster=float,
                             comment="等待来自子进程stdout输出所用的时间")
 
+history_length = get_config("base.history_length", 2000, caster=int,
+                            comment="历史记录的长度(行)")
+
 update_config()
 

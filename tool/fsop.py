@@ -47,6 +47,14 @@ def write_file(path, data):
         f.write(data)
     return {'result': True}
 
+def replace_file(path, pattern, replace):
+    with open(os.path.join(cwd, path), 'r', encoding='utf-8') as f:
+        content = f.read()
+    content = content.replace(pattern, replace)
+    with open(os.path.join(cwd, path), 'w', encoding='utf-8') as f:
+        f.write(content)
+    return {'result': True}
+
 def make_dir(path):
     os.makedirs(os.path.join(cwd, path), exist_ok=True)
     return {'result': True}
@@ -118,6 +126,16 @@ tools = [
             "data": "string"
         },
         "func": write_file
+    },
+    {
+        "name": "replace_file",
+        "description": "Replace file",
+        "args": {
+            "path": "string:pathA",
+            "pattern": "string",
+            "replace": "string"
+        },
+        "func": replace_file
     },
     {
         "name": "make_dir",
