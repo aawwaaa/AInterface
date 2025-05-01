@@ -18,7 +18,7 @@ try:
     import pty
 except ImportError:
     try:
-        import winpty as pty
+        import pywinpty as pty
     except ImportError:
         print("Error: Neither pty and winpty is available.")
         sys.exit(1)
