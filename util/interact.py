@@ -247,6 +247,18 @@ def handle_pad_scroll_key(key):
             handle_pad_scroll_delta(5)
             refresh()
             return True
+    if key == curses.KEY_PPAGE:
+        max_y, max_x = stdscr.getmaxyx()
+        max_y -= status_bar_height + progress_bar_height + 5
+        handle_pad_scroll_delta(-max_y)
+        refresh()
+        return True
+    if key == curses.KEY_NPAGE:
+        max_y, max_x = stdscr.getmaxyx()
+        max_y -= status_bar_height + progress_bar_height + 5
+        handle_pad_scroll_delta(max_y)
+        refresh()
+        return True
     return False
 
 def refresh():
@@ -260,7 +272,7 @@ def refresh():
     pad.refresh(
         top, 0,
         progress_bar_height, 0,
-        max_y, max_x - 1
+        progress_bar_height + max_y, max_x - 1
     )
     cursor_y, cursor_x = get_current_position()
     cursor_y -= top
@@ -462,7 +474,7 @@ def get_user_input(embed: bool = True, label = "") -> str:
         nonlocal input_start_y
         global pad_bottom
         if y >= max_y - 1:
-            while y >= max_y - 1:
+            while y >= max_y:
                 input_start_y -= 1
                 scroll_line()
                 y -= 1
@@ -713,11 +725,6 @@ def get_user_input(embed: bool = True, label = "") -> str:
                 redraw_input()
         elif 0 < key < 32:
             handle_shortkey(key)
-        
-        # Check if we need to scroll vertically
-        if input_start_y + len(wrapped_lines_info) >= max_y - 1:
-            input_start_y = max(0, input_start_y - 1)
-            redraw_input()
     
     exit_layer()
     for line in lines:
@@ -968,14 +975,21 @@ def init_stdscr(stdscr1):
     update_windows()
 
 PREDICT_CALL = r"<predict>[\s\S\n]*?</predict>"
+THOUGHT = r"<thought>[\s\S\n]*?</thought>"
 
 def handle_predict(message):
     global predicts
+    match = re.search(THOUGHT, message)
+    if not match:
+        thought = ""
+    else:
+        thought = message[match.start():match.end()]
+        message = message[0:match.start()] + message[match.end():]
     match = re.search(PREDICT_CALL, message)
     if not match:
         return message
     xml = message[match.start():match.end()]
-    message = message[0:match.start()] + message[match.end():]
+    message = thought + message[0:match.start()] + message[match.end():]
     try:
         obj = xmltodict.parse(xml)["predict"]
     except Exception:

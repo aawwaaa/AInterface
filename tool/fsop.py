@@ -30,7 +30,7 @@ def list_files(path = "", all = False, list = True):
     return {'result': result}
 
 def file_tree(path = "."):
-    result = subprocess.run(['tree', path], 
+    result = subprocess.run(['tree', "-L", "2", path], 
                           cwd=os.path.join(path, cwd),
                           capture_output=True, 
                           text=True)

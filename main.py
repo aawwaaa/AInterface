@@ -46,14 +46,17 @@ def init():
 
     global provider
     provider_name = config.provider
-    __import__("provider." + provider_name)
+    import provider.fakedata
+    import provider.grok
+    import provider.unlimitedai
     provider = ProviderMetaclass.providers[provider_name]()
 
     messages.add_message("system", f"""
 You are an AI assistant. You can use the following tools: {tools.generate_prompt()}
 Output <tool><name>TOOL_NAME</name><arg1>ARG1...</arg1><arg2>ARG2...</arg2>...</tool> \
 with XML syntax and escaping when using tool.
-Call proper tools when needed according to the user's statement with actual args.
+Call proper tools when needed according to the user's statement with actual args with PROPER ORDER.
+You may use A FEW of TURNS to finish the task.
 """ + #As parallel as possible, such as use as many tools once as possible.
 """MUST output the important thinking in every output by <thought><plan>value</plan>...</thought>, including: your plan, analysis \
 and important things.
@@ -64,7 +67,6 @@ The message presented to the user MUST be outputed by '<output>...</output>'.
 Append some predicts about the statement of the user \
 according to the context by <predict><predict1>...</predict1><predict2>...</predict2>...</predict> \
 WITH ONLY direct command such as <predict><predict1>列出所有文件</predict1><predict2>讲个笑话</predict2>...</predict>.
-You MUST use ONLY XML escape when outputing ANY TEXT content, but without `<br/>`.
 Use Chinese to talk with user.""")
 
     if args.exported_file:
