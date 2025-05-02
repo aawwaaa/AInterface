@@ -71,7 +71,7 @@ def init():
 
     if args.config:
         config.edit_config()
-        os.exit(0)
+        os._exit(0)
 
     global provider
     provider_name = config.provider
