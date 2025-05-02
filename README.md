@@ -1,5 +1,5 @@
 
-![image](/opt/data/ai/AInterface/README.png)
+![image](README.png)
 
 # AI 助手自述
 
