@@ -111,8 +111,8 @@ tools += {
     "description": "Replace file, PRIORITY using to save tokens.",
     "args": {
         "path": "string:pathA|Allows relative path from cwd.",
-        "pattern": "string",
-        "replace": "string"
+        "pattern": "string|RAW text, replace all",
+        "replace": "string|RAW text"
     },
     "func": replace_file
 }
