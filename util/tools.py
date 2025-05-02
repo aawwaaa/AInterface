@@ -1,4 +1,5 @@
 import traceback
+import json
 
 from util.interact import tool_using, tool_using_result, tool_using_error
 from util.section import unparse
@@ -12,7 +13,14 @@ When the task is done after the tool called, talk to the user.
 When using the tool, follow the STRUCTURE and WITHOUT ANY COMMENT:
 To use default value, DO NOT add the key into body.
 ```
-\u00a7tool\u00a7{tool_name}
+\u00a7tool\u00a7{tool_name(call_1)}
+\u00a7.arg1\u00a7{tool_arg1}
+\u00a7.arg2_multiline|\u00a7
+{tool_arg2}
+...
+\u00a7end_tool\u00a7
+......
+\u00a7tool\u00a7{tool_name(call_n)}
 \u00a7.arg1\u00a7{tool_arg1}
 \u00a7.arg2_multiline|\u00a7
 {tool_arg2}
@@ -26,83 +34,159 @@ Believe every tool calling in OUTPUT area will be responded by the REAL system.
 SPLIT = "\u00a7"
 def generate_prompt(tools):
     output = ["All available tools:"]
-    for tool in tools.tools:
+    for tool in tools.tools.values():
         args = {}
-        for key, t in tools.tools_args[tool].items():
-            args[key] = t
-            if tools.tools_args_description[tool][key] is not None:
-                args[key + ":description"] = tools.tools_args_description[tool][key]
-        output.append(unparse("tool", tool, {
-            "description": tools.tools_description[tool],
+        for arg in tool.args.values():
+            args[arg.name] = arg.type
+            if arg.optional:
+                args[arg.name+":optional"] = "true"
+            if arg.description is not None:
+                args[arg.name + ":description"] = arg.description
+        output.append(unparse("tool", tool.name, {
+            "description": tool.description,
             **args
         }))
     return "\n".join(output)
 
+class ToolNamespace:
+    def __init__(self, name):
+        self.name = name
+        self.tools = []
+
+    def __add__(self, tool):
+        if isinstance(tool, dict):
+            tool = Tool(tool)
+        if isinstance(tool, Tool):
+            tool.name = self.name + "." + tool.name
+            tool.formatted["function"]["name"] = tool.name
+            self.tools.append(tool)
+        return self
+
+class ToolArg:
+    def __init__(self, options):
+        self.name = options["name"]
+        self.type = options["type"]
+        self.description = options["description"]
+        
+        self.optional = False
+        self.feedback = False
+        while self.type[-1] in ("?", "A"):
+            flag = self.type[-1]
+            self.type = self.type[:-1]
+            if flag == "?":
+                self.optional = True
+            elif flag == "A":
+                self.feedback = True
+
+        self.formatted = {
+            self.name: {
+                "type": self.type,
+                "description": self.description
+            }
+        }
+        if "formatted" in options:
+            self.formatted |= options["formatted"]
+
+    def check_arg(self, arg):
+        if arg is None:
+            if not self.optional:
+                return "Missing argument"
+            # Do nothing
+            return None
+        if self.type == "string:path":
+            if ".." in arg:
+                return "Insecure path: " + arg
+        if self.type == "bool":
+            if arg not in (True, False, "true", "false"):
+                return "Invalid bool: " + arg
+        return None
+
+    def cast_arg(self, arg):
+        if self.type == "bool":
+            return bool(arg)
+        if self.type == "int":
+            return int(arg)
+        if self.type == "float":
+            return float(arg)
+        return arg
+
+class Tool:
+    def __init__(self, options):
+        self.name = options["name"]
+        self.description = options["description"]
+        self.args = {}
+        self.func = options["func"]
+        properties = {}
+        required = []
+        for key, text in options["args"].items():
+            if isinstance(text, str):
+                text += "|"
+                t, description, *_ = text.split("|")
+                arg = ToolArg({
+                    "name": key,
+                    "type": t,
+                    "description": description
+                })
+            else:
+                arg = ToolArg(text)
+            self.args[key] = arg
+            properties |= arg.formatted
+            if not arg.optional:
+                required.append(key)
+
+        self.formatted = {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": {
+                    "type": "object",
+                    "properties": properties,
+                    "required": required,
+                    "additionalProperties": False
+                }
+            }
+        }
+
 class Tools:
     def __init__(self):
         self.tools = {}
-        self.tools_description = {}
-        self.tools_args = {}
-        self.tools_args_description = {}
+        self.openai_tools = None
 
-    def register_tool(self, name, description, args, func):
-        self.tools[name] = func
-        self.tools_description[name] = description
-        self.tools_args[name] = {}
-        self.tools_args_description[name] = {}
-        for key, t in args.items():
-            t = t.split("|")
-            self.tools_args[name][key] = t[0]
-            self.tools_args_description[name][key] = None if len(t) == 1 else t
+    def register_tool(self, tool):
+        self.tools[tool.name] = tool
 
-    def import_tools(self, namespace, tools):
-        for tool in tools:
-            name = namespace + '.' + tool["name"]
-            description = tool["description"]
-            args = tool["args"]
-            func = tool["func"]
-            self.register_tool(name, description, args, func)
+    def import_tools(self, tools):
+        for tool in tools.tools:
+            self.register_tool(tool)
 
     def generate_prompt(self):
         return generate_prompt(self)
     
     def check_args(self, name, args):
-        if name not in self.tools_args:
-            raise ValueError("Tool not found: " + name)
+        if name not in self.tools:
+            raise Exception("Unknown tool: " + name)
+        tool = self.tools[name]
         errors = []
-        for key, t in self.tools_args[name].items():
-            if key not in args or args[key] is None:
-                if '?' not in t[-3:]:
-                    errors += ["Missing argument: " + key]
-                continue
-            if t[0:len("string:path")] == "string:path":
-                if ".." in args[key]:
-                    errors += ["Insecure path: " + args[key]]
-                    continue
-            if t[0:len("bool")] == "bool":
-                if args[key] != "true" and args[key] != "false":
-                    errors += ["Invalid argument: " + key]
-                    continue
+        for arg in tool.args.values():
+            error = arg.check_arg(args.get(arg.name, None))
+            if error is not None:
+                errors.append(arg.name + ": " + error)
         if len(errors) > 0:
             raise Exception('\n'.join(errors))
         return True
 
     def cast_args(self, name, args):
-        for key, t in self.tools_args[name].items():
-            if key not in args:
-                continue
-            if t[0:3] == "int":
-                args[key] = int(args[key])
-            if t[0:4] == "bool":
-                args[key] = args[key] == "true"
-            if t[0:6] == "string":
-                args[key] = '' if args[key] is None else str(args[key])
+        tool = self.tools[name]
+        for arg in tool.args.values():
+            if arg.name in args:
+                args[arg.name] = arg.cast_arg(args[arg.name])
         return args
 
     def append_result(self, name, args, result):
-        for key, t in self.tools_args[name].items():
-            if 'A' in t[-3:] and key in args:
-                result[key] = str(args[key])
+        for arg in self.tools[name].args.values():
+            if arg.name in args and arg.feedback:
+                result[arg.name] = args[arg.name]
         return result
     
     def handle_tool(self, section):
@@ -112,7 +196,7 @@ class Tools:
             tool_using(name, args)
             self.check_args(name, args)
             args = self.cast_args(name, args)
-            result = self.tools[name](**args)
+            result = self.tools[name].func(**args)
             tool_using_result(result)
             result = self.append_result(name, args, result)
             return result, unparse("tool_result", name, result, end="tool_result_end")
@@ -122,17 +206,53 @@ class Tools:
             return {"error": msg}, unparse("tool_error", msg, {}, 
                                            end="tool_error_end")
 
+    def handle_openai_tool_calling(self, call):
+        name = call.function.name
+        args = {'raw_args': call.function.arguments}
+        try:
+            args = json.loads(call.function.arguments)
+            tool_using(name, args)
+            self.check_args(name, args)
+            args = self.cast_args(name, args)
+            result = self.tools[name].func(**args)
+            tool_using_result(result)
+            result = self.append_result(name, args, result)
+            return name, args, result, call.id, json.dumps(result)
+        except Exception:
+            msg = traceback.format_exc()
+            tool_using_error(msg)
+            error = {"error": msg}
+            return name, args, error, call.id, json.dumps(error)
+
     def add_example_tool(self):
-        def echo(input, optional_input = ""):
-            return {
-                "input": input,
-                "optional_input": optional_input
-            }
-        self.register_tool("example_tool", "Example tool, which will echo the input", {
+        add_example_tool(self)
+
+    def add_example(self, messages):
+        add_example(self, messages)
+    
+    def to_openai_tools(self):
+        return to_openai_tools(self)
+
+def add_example_tool(self):
+    def echo(input, optional_input = ""):
+        return {
+            "input": input,
+            "optional_input": optional_input
+        }
+    self.register_tool(Tool({
+        "name": "example_tool", 
+        "description": "Example tool, which will echo the input",
+        "args": {
             "input": "string",
             "optional_input": "string?",
-        }, echo)
-    def add_example(self, messages):
+        },
+        "func": echo
+    }))
+
+def add_example(self, messages):
+        messages.add_tool_result({
+            "input": "Hello world!",
+        })
         messages.add_message("assistant", unparse("tool", "example_tool", {
             "input": "Hello world!",
             "optional_input": ""
@@ -141,7 +261,8 @@ class Tools:
             "input": "Hello world!",
         }, end="tool_result_end"))
         messages.add_tool_result({
-            "input": "Hello world!",
+            "input": "Hello world,\ntoo.",
+            "optional_input": "Hi world!",
         })
         messages.add_message("assistant", unparse("tool", "example_tool", {
             "input": "Hello world,\ntoo.",
@@ -151,7 +272,13 @@ class Tools:
             "input": "Hello world,\ntoo.",
             "optional_input": "Hi world!",
         }, end="tool_result_end"))
-        messages.add_tool_result({
-            "input": "Hello world,\ntoo.",
-            "optional_input": "Hi world!",
-        })
+
+def to_openai_tools(self):
+    if self.openai_tools is not None:
+        return self.openai_tools
+    array = []
+    for name, tool in self.tools.items():
+        array += [tool.formatted]
+    self.openai_tools = array
+    return array
+

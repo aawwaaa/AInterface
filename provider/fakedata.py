@@ -19,12 +19,12 @@ class Provider(metaclass=ProviderMetaclass):
                     on_outputing(json.loads(chunk[2:]))
                 elif chunk[0:2] == "F:":
                     f.close()
-                    return {"finishReason": json.loads(chunk[2:])}
+                    return {"finish_reason": json.loads(chunk[2:])}
             f.close()
-            return {"finishReason": "stop"}
+            return {"finish_reason": "stop"}
         except Exception:
             e = traceback.format_exc()
-            return {"finishReason": "Error: " + str(e)}
+            return {"finish_reason": "Error: " + str(e)}
     def interrupt(self):
         pass
     

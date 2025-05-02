@@ -44,7 +44,7 @@ class Provider(metaclass=ProviderMetaclass):
         with open(cache_file_name, "w") as f:
             json.dump({"token": self.token, "token_expiry": self.token_expiry}, f)
     
-    def execute(self, options, on_thinking, on_outputing):
+    def execute(self, options, update, on_thinking, on_outputing):
         self.update_token()
         options = {
             "id": uuid.uuid4().hex,
@@ -62,12 +62,12 @@ class Provider(metaclass=ProviderMetaclass):
                     on_outputing(json.loads(chunk[2:]))
                 elif chunk[0:2] == "e:":
                     return json.loads(chunk[2:])
-            return {"finishReason": "Error: " + str(response.status_code)}
+            return {"finish_reason": "Error: " + str(response.status_code)}
         except Exception:
             e = traceback.format_exc()
             if self.last_response is None:
-                return {"finishReason": "stop"}
-            return {"finishReason": "Error: " + str(e)}
+                return {"finish_reason": "stop"}
+            return {"finish_reason": "Error: " + str(e)}
     def interrupt(self):
         self.last_response.close()
         self.last_response = None

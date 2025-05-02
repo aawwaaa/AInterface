@@ -2,9 +2,9 @@ import sys
 import curses
 import locale
 import re
-import xmltodict
 import time
 import platformdirs
+import threading
 import os
 import os.path as path
 import math
@@ -48,6 +48,7 @@ save_session_implement = lambda: "none"
 announce_text = ""
 announce_duration = 0
 predicts = []
+getch_queue = []
 
 length_bar_value = 0
 
@@ -92,7 +93,7 @@ def handle_shortkey(key):
     if last_output_type is not None and current_layer == 1 and layer_stack[0][0] != "输入":
         if key == ord('T') - ord('A') + 1:
             required_interrupt = True
-            return
+            return True
     if key == ord('R') - ord('A') + 1:
         name = save_session_implement()
         announce(f"保存成功：{name}")
@@ -290,6 +291,16 @@ def get_max_yx() -> Tuple[int, int]:
     y, x = pad.getmaxyx()
     return y, min(x, max_x)
 
+def idle_getch():
+    stdscr.nodelay(1)
+    key = stdscr.getch()
+    if key != -1:
+        if handle_pad_scroll_key(key):
+            pass
+        else:
+            handle_shortkey(key)
+    stdscr.nodelay(0)
+
 # '''
 def output(chars: str, *, color = COLOR_WHITE, prefix = '|  '):
     """Output content at the current layer, supporting line breaks and appending to current position"""
@@ -358,14 +369,7 @@ def output(chars: str, *, color = COLOR_WHITE, prefix = '|  '):
     move_to_position(current_y, current_x)
     refresh()
     update_windows()
-    stdscr.nodelay(1)
-    key = stdscr.getch()
-    if key != -1:
-        if handle_pad_scroll_key(key):
-            pass
-        else:
-            handle_shortkey(key)
-    stdscr.nodelay(0)
+    idle_getch()
 # '''
 
 '''
@@ -744,6 +748,8 @@ def request_approve() -> Union[bool, str]:
     
     while True:
         key = stdscr.getch()
+        if handle_pad_scroll_key(key):
+            continue
         if key == ord('y') or key == ord('Y'):
             exit_layer()
             move_to_position(*cursor_pos_stored)
@@ -760,13 +766,24 @@ def request_approve() -> Union[bool, str]:
             stdscr.clrtoeol()
             return get_user_input()
 
+def ask_for_information(label, message) -> str:
+    enter_layer("操作", COLOR_YELLOW, "输入信息: " + label)
+    output(message+"\n")
+    exit_layer()
+    input = get_user_input()
+    return input
+
 def ask_for_user_operate(label, message) -> None:
     enter_layer("操作", COLOR_YELLOW, "需要介入: " + label)
     output(message+"\n")
     output("完成? ")
     output("[任意键]", color=COLOR_CYAN)
     
-    stdscr.getch()
+    while True:
+        key = stdscr.getch()
+        if handle_pad_scroll_key(key):
+            continue
+        break
     exit_layer()
 
 def breakable_process(label, func) -> None:

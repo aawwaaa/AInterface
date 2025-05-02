@@ -12,6 +12,7 @@ import util.interact as interact
 from util.section import unparse
 import tool.fsop as fsop
 import config as config
+from util.tools import ToolNamespace
 
 subprocesses = {}
 current = None
@@ -60,7 +61,8 @@ def websocket_thread():
     sys.stdout.write("\nWebsocket done: " + str(port) + "\n")
     websocket_server.serve_forever()
 
-threading.Thread(target=websocket_thread, daemon=True).start()
+def start_websocket():
+    threading.Thread(target=websocket_thread, daemon=True).start()
 
 class SubProcess:
     id = 1
@@ -150,7 +152,10 @@ class SubProcess:
 
         interact.breakable_process(f"等待子进程连接: <{self.id}> {self.command}", loop)
 
+tools = ToolNamespace("subprocess")
+
 def add_to_platform_if_has(name, danger_stdin = False, args = ''):
+    global tools
     if args != '':
         args = ' ' + args
     global platform
@@ -184,16 +189,17 @@ def add_to_platform_if_has(name, danger_stdin = False, args = ''):
                 stdin += '\n'
             process.write_stdin(stdin)
         return {'result': True, 'process_id': process.id}
-    platform += [{
+    tools += {
         "name": 'start_'+name,
-        "description": 'Start ' + name + ' in interactive mode and select it, THE PARAM STDIN IS RAW',
+        "description": 'Start ' + name + ' in interactive mode and select it.',
         "args": {
             "cwd": "string:path?",
-            "stdin": "string?",
-            "stdin_append_ln": "bool?"
+            "stdin": "string?|This param is RAW, it means all the thing will be passed to stdin directly.",
+            "stdin_append_ln": "bool?|If the `stdin` is whole line, " \
+                "set this to `true`, or it will just type chars in as a partial line."
         },
         "func": start
-    }]
+    }
 
 def pull_stdout():
     global process_operation
@@ -207,6 +213,7 @@ def pull_stdout():
         while True:
             if check():
                 return
+            time.sleep(0.05)
             removes = []
             for process in subprocesses.values():
                 stdout = process.pull_stdout()
@@ -222,10 +229,9 @@ def pull_stdout():
                 del subprocesses[process.id]
             if time.time() > duration:
                 return
+            time.sleep(0.45)
     interact.breakable_process("拉取stdout中...", loop)
     return ret
-
-platform = []
 
 if sys.platform == "win32":
     add_to_platform_if_has("cmd", True)
@@ -245,6 +251,12 @@ def get_processes():
             'removed': process.removed
         })
     return ret
+tools += {
+    'name': 'get_processes',
+    'description': 'Get list of running processes',
+    'args': {},
+    'func': get_processes
+}
 
 def check_selected(func):
     def wrapper(*args, **kwargs):
@@ -261,6 +273,12 @@ def kill_process():
     return {
         'result': current.kill()
     }
+tools += {
+    'name': 'kill_process',
+    'description': 'Kill selected process',
+    'args': { },
+    'func': kill_process
+}
 
 @check_selected
 def stdin_write(data, append_ln = False):
@@ -282,12 +300,30 @@ def stdin_write(data, append_ln = False):
     return {
         'result': current.write_stdin(data)
     }
+tools += {
+    'name': 'stdin_write',
+    'description': 'Write to stdin to selected process',
+    'args': {
+        'data': 'string|This param is RAW, it means all the thing will be passed to stdin directly.',
+        "append_ln": "bool?|If the `stdin` is whole line, " \
+            "set this to `true`, or it will just type chars in as a partial line."
+    },
+    'func': stdin_write
+}
 
 @check_selected
 def signal_write(signal):
     return {
         'result': current.write_signal(signal)
     }
+tools += {
+    'name': 'signal_write',
+    'description': 'Write signal to selected process, such as ^C(3), ^Z(26) etc.',
+    'args': {
+        'signal': 'int'
+    },
+    'func': signal_write
+}
 
 def select_process(process_id):
     global current
@@ -302,6 +338,14 @@ def select_process(process_id):
         'process_id': process_id,
         'command': current.command,
     }
+tools += {
+    'name': 'select_process',
+    'description': 'Select process',
+    'args': {
+        'process_id': 'int'
+    },
+    'func': select_process
+}
 
 @check_selected
 def ask_for_user_operate(message):
@@ -309,52 +353,13 @@ def ask_for_user_operate(message):
     return {
         'result': True
     }
+tools += {
+    'name': 'ask_for_user_operate',
+    'description': 'Ask for user to operate manually in selected process, such as password typing',
+    'args': {
+        'message': 'string'
+    },
+    'func': ask_for_user_operate
+}
 
-tools = [
-    {
-        'name': 'get_processes',
-        'description': 'Get list of running processes',
-        'args': {},
-        'func': get_processes
-    },
-    {
-        'name': 'kill_process',
-        'description': 'Kill selected process',
-        'args': { },
-        'func': kill_process
-    },
-    {
-        'name': 'stdin_write',
-        'description': 'Write to stdin to selected process',
-        'args': {
-            'data': 'string|It is RAW DATA',
-            'append_ln': 'bool?'
-        },
-        'func': stdin_write
-    },
-    {
-        'name': 'signal_write',
-        'description': 'Write signal to selected process, such as ^C(3), ^Z(26) etc.',
-        'args': {
-            'signal': 'int'
-        },
-        'func': signal_write
-    },
-    {
-        'name': 'select_process',
-        'description': 'Select process',
-        'args': {
-            'process_id': 'int'
-        },
-        'func': select_process
-    },
-    {
-        'name': 'ask_for_user_operate',
-        'description': 'Ask for user to operate manually in selected process, such as password typing',
-        'args': {
-            'message': 'string'
-        },
-        'func': ask_for_user_operate
-    },
-]
-tools += platform
+__all__ = ["tools", "start_websocket"]
