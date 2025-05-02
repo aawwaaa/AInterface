@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main  # Adjust as needed
+  workflow_dispatch:  # Added for manual triggering
 
 jobs:
   build:
