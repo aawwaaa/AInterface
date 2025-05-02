@@ -30,7 +30,7 @@ tools += {
         "relative": "string|The relative path to the new working directory"
     },
     "func": set_cwd
-},
+}
 
 def list_files(path = "", all = False, list = True):
     path = os.path.join(cwd, path)

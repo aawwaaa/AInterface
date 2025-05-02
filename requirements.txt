@@ -1,8 +1,9 @@
 openai==1.76.2
 platformdirs==4.3.7
 pyfiglet==1.0.2
+pywinpty==2.0.15
 Requests==2.32.3
 toml==0.10.2
 wcwidth==0.2.13
 websockets==15.0.1
-xmltodict==0.14.2
+windows_curses==2.4.1

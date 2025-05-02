@@ -15,15 +15,13 @@ To use default value, DO NOT add the key into body.
 ```
 \u00a7tool\u00a7{tool_name(call_1)}
 \u00a7.arg1\u00a7{tool_arg1}
-\u00a7.arg2_multiline|\u00a7
-{tool_arg2}
+\u00a7.arg2|\u00a7
+{tool_arg2_with_multiline}
 ...
 \u00a7end_tool\u00a7
 ......
 \u00a7tool\u00a7{tool_name(call_n)}
 \u00a7.arg1\u00a7{tool_arg1}
-\u00a7.arg2_multiline|\u00a7
-{tool_arg2}
 ...
 \u00a7end_tool\u00a7
 ```

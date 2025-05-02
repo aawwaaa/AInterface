@@ -204,7 +204,7 @@ def add_to_platform_if_has(name, danger_stdin = False, args = ''):
 def pull_stdout():
     global process_operation
     duration = 0
-    ret = ''
+    ret = {}
     if process_operation:
         process_operation = False
         duration = time.time() + config.stdout_timeout
@@ -218,10 +218,10 @@ def pull_stdout():
             for process in subprocesses.values():
                 stdout = process.pull_stdout()
                 if stdout:
-                    ret += unparse("stdout", "[" + str(process.id) + "] " \
-                        + process.command, {
-                            'data': stdout
-                        }, end="stdout_end")
+                    if process.id not in ret:
+                        ret[process.id] = stdout
+                    else:
+                        ret[process.id] += stdout
                     duration = time.time() + config.stdout_timeout
                 if process.removed:
                     removes.append(process)
@@ -231,7 +231,13 @@ def pull_stdout():
                 return
             time.sleep(0.45)
     interact.breakable_process("拉取stdout中...", loop)
-    return ret
+    ret2 = ""
+    for process_id in ret:
+        ret2 += unparse("stdout", "[" + str(process_id) + "] " \
+            + subprocesses[process_id].command, {
+                'data': ret[process_id]
+            }, end="stdout_end")
+    return ret2
 
 if sys.platform == "win32":
     add_to_platform_if_has("cmd", True)
@@ -360,6 +366,19 @@ tools += {
         'message': 'string'
     },
     'func': ask_for_user_operate
+}
+
+def wait_for_stdout():
+    global process_operation
+    process_operation = True
+    return {
+        'result': True
+    }
+tools += {
+    'name': 'wait_for_stdout',
+    'description': 'Wait for stdout of any process.',
+    'args': {},
+    'func': wait_for_stdout
 }
 
 __all__ = ["tools", "start_websocket"]
