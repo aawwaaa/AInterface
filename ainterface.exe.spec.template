@@ -22,7 +22,8 @@ a = Analysis(
     binaries=[],
     datas=[(os.path.join(os.getcwd(), 'venv/lib/python3.12/site-packages/pyfiglet/fonts'), 'pyfiglet/fonts')],
     hiddenimports=[
-        'pyfiglet.fonts'
+        'pyfiglet.fonts',
+	'subprocess_client'
     ],
     hookspath=[],
     hooksconfig={},

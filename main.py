@@ -1,7 +1,8 @@
 from sys import argv
 
 if len(argv) > 1 and argv[1] == "__connect__":
-    __import__("subprocess_client")
+    import subprocess_client
+    subprocess_client.run()
     exit(0)
 
 import curses
@@ -70,7 +71,7 @@ def init():
 
     if args.config:
         config.edit_config()
-        exit(0)
+        os.exit(0)
 
     global provider
     provider_name = config.provider
@@ -341,4 +342,8 @@ if __name__ == "__main__":
     except EOFError:
         pass
     except KeyboardInterrupt:
+        pass
+    try:
+        curses.endwin()
+    except curses.Error:
         pass

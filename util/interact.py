@@ -117,6 +117,11 @@ def log_to_file(output):
         return
     log_file.write(output)
 
+def flush_log_file():
+    if not config.logging:
+        return
+    log_file.flush()
+
 # Initialize colors
 def init_colors():
     curses.start_color()
@@ -745,25 +750,26 @@ def request_approve() -> Union[bool, str]:
     enter_layer("审批", COLOR_YELLOW, "")
     output("同意? ")
     output("[y/N/r]", color=COLOR_CYAN)
+
+    def clear():
+        exit_layer()
+        move_to_position(cursor_pos_stored[0]+1, cursor_pos_stored[1])
+        stdscr.clrtoeol()
+        move_to_position(*cursor_pos_stored)
+        stdscr.clrtoeol()
     
     while True:
         key = stdscr.getch()
         if handle_pad_scroll_key(key):
             continue
         if key == ord('y') or key == ord('Y'):
-            exit_layer()
-            move_to_position(*cursor_pos_stored)
-            stdscr.clrtoeol()
+            clear()
             return True
         elif key == ord('n') or key == ord('N') or key == 27 or key == 10:  # 27 is ESC
-            exit_layer()
-            move_to_position(*cursor_pos_stored)
-            stdscr.clrtoeol()
+            clear()
             return False
         elif key == ord('r') or key == ord('R'):
-            exit_layer()
-            move_to_position(*cursor_pos_stored)
-            stdscr.clrtoeol()
+            clear()
             return get_user_input()
 
 def ask_for_information(label, message) -> str:
@@ -798,11 +804,16 @@ def breakable_process(label, func) -> None:
 
     def clear():
         exit_layer()
+        move_to_position(cursor_pos_stored[0]+1, cursor_pos_stored[1])
+        stdscr.clrtoeol()
         move_to_position(*cursor_pos_stored)
         stdscr.clrtoeol()
     def check():
         stdscr.nodelay(1)
         key = stdscr.getch()
+        if handle_pad_scroll_key(key):
+            stdscr.nodelay(0)
+            return False
         stdscr.nodelay(0)
         return key == ord('c') or key == ord('C')
 

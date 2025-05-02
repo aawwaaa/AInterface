@@ -131,9 +131,9 @@ def main(connect_target, cwd, command):
         
         handle_stdin(process, master_fd)
 
+def run():
+    connect_target = sys.argv[2]
+    cwd = sys.argv[3]
+    command = sys.argv[4]
 
-connect_target = sys.argv[2]
-cwd = sys.argv[3]
-command = sys.argv[4]
-
-main(connect_target, cwd, command)
+    main(connect_target, cwd, command)

@@ -65,7 +65,7 @@ def _has_command(command):
 
 provider = get_config("base.provider", "grok", comment="AI提供者")
 
-show_internal = get_config("base.show_internal", True, caster=lambda x: bool(x),
+show_internal = get_config("base.show_internal", False, caster=lambda x: bool(x),
                            comment="显示内部输出，如思考过程和调用过程")
 
 logging = get_config("base.logging", False, caster=lambda x: bool(x),

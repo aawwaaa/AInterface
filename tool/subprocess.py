@@ -58,7 +58,8 @@ def websocket_thread():
             websocket_server = serve(ws_handler, host, port)
         except OSError:
             pass
-    sys.stdout.write("\nWebsocket done: " + str(port) + "\n")
+    interact.log_to_file("\n[Subprocess] Websocket port: " + str(port) + "\n")
+    interact.flush_log_file()
     websocket_server.serve_forever()
 
 def start_websocket():
@@ -77,6 +78,7 @@ class SubProcess:
                 args[i] = "[AI.Subprocess] <" + str(self.id) + "> " + command
         self.process = subprocess.Popen(args)
         interact.log_to_file("\n[Subprocess] Create process: " + str(self.id) + ': ' + ' '.join(args)+"\n")
+        interact.flush_log_file()
         subprocesses[self.id] = self
         current = self
         self.websocket = None
