@@ -29,7 +29,9 @@ jobs:
           pyinstaller --clean ainterface.exe.spec.template  # Updated to reference the template file
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: ainterface-exe
           path: dist/ainterface.exe  # Assuming the output is in dist/ folder
+          retention-days: 1
+          
