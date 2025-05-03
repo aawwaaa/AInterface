@@ -2,6 +2,7 @@ import os
 import subprocess
 
 from util.tools import ToolNamespace
+import util.section as section
 
 tools = ToolNamespace("fsop")
 
@@ -108,7 +109,7 @@ def replace_file(path, pattern, replace):
     return {'result': True}
 tools += {
     "name": "replace_file",
-    "description": "Replace file, PRIORITY using to save tokens.",
+    "description": "Replace file. Use this first.",
     "args": {
         "path": "string:pathA|Allows relative path from cwd.",
         "pattern": "string|RAW text, replace all",
@@ -181,5 +182,10 @@ tools += {
     "func": move_file
 }
 
-__all__ = ["tools", "get_cwd_str"]
+def input_data():
+    return section.unparse('fsop:status', '', {
+        'cwd': get_cwd_str()
+    })
+
+__all__ = ["tools", "get_cwd_str", "input_data"]
 

@@ -10,7 +10,7 @@ import pyfiglet
 import time
 import re
 import argparse
-import math
+import sys
 import threading
 import queue
 
@@ -20,18 +20,19 @@ import tool.subprocess
 from provider import ProviderMetaclass
 import util.interact as interact
 from util.session import Session
-from util.tools import Tools, TOOL_CALLING_PROMPT
+from util.tools import Tools
 import util.section as section
+import util.prompt as prompt
 import config
 
 session = Session()
 tools = Tools()
 section_reader = section.SectionReader({
     'tool': 'whole',
-    'end_tool': 'block',
+    'tool:end': 'block',
     'thought': 'through',
     'predict': 'whole',
-    'predict_end': 'block',
+    'predict:end': 'block',
     'output': 'through'
 })
 provider = None
@@ -40,27 +41,11 @@ tools.import_tools(tool.base.tools)
 tools.import_tools(tool.fsop.tools)
 tools.import_tools(tool.subprocess.tools)
 
+SYSTEM_PROMPT = prompt.import_prompt("system")
+SECTION_PROMPT = prompt.import_prompt("section")
+TOOL_PROMPT = prompt.import_prompt("tool")
+
 args = {}
-
-SYSTEM_PROMPT = """You are an AI assistant.
-NO ROLEPLAY and META ANALYSIS. Follow ANY structured output instruction.
-MUST output the hint to next turn which can boost the thinking in every output.
-The message presented to the user MUST be outputed by section `output`. \
-"""
-
-PREDICT_PROMPT = f"""
-If the output is without more steps, ppend some predicts about the statement of the user \
-according to the context by section `predict` with subsection `.{{index}}` \
-WITH ONLY direct command.
-For example:
-```
-{section.unparse('predict', '', {
-    '1': 'Find the meeting material created in last week',
-    '2': 'Write index.{html,css,js} with some basic template',
-    '3': 'Make a new project in current directory powered by nodejs'
-})}
-```
-"""
 
 def init():
     global args
@@ -71,7 +56,7 @@ def init():
 
     if args.config:
         config.edit_config()
-        os._exit(0)
+        sys.exit(0)
 
     global provider
     provider_name = config.provider
@@ -80,10 +65,13 @@ def init():
     import provider.unlimitedai
     provider = ProviderMetaclass.providers[provider_name]()
 
-    msg = SYSTEM_PROMPT + PREDICT_PROMPT
-    # msg += section.SECTION_PROMPT
+    SYSTEM_PROMPT.apply("provider", provider.name)
+
+    msg = SYSTEM_PROMPT.get()
+    msg += SECTION_PROMPT.get()
     if provider.mode == "section_calling":
-        msg += TOOL_CALLING_PROMPT + tools.generate_prompt()
+        TOOL_PROMPT.apply("available_tools", tools.generate_prompt())
+        msg += TOOL_PROMPT.get()
     session.add_message("system", msg)
     # if provider.mode == "section_calling":
     #     tools.add_example_tool()
@@ -132,7 +120,9 @@ def main(stdscr):
             session.add_message("system", "Continue your output...")
             request_loop()
             continue
-        session.add_message("user", command)
+        data = section.unparse("user", command, {})
+        data += tool.fsop.input_data()
+        session.add_message("user", data)
         request_loop()
 
 def save_session_implement():

@@ -4,31 +4,6 @@ import json
 from util.interact import tool_using, tool_using_result, tool_using_error
 from util.section import unparse
 
-TOOL_CALLING_PROMPT = """
-Call proper tools when needed according to the user's statement with REAL args and PROPER ORDER.
-You may use A FEW of TURNS to finish the task, with a SERIAL tool calling.
-Note: You can use multi tools in one output complexed with normal output.
-NOTICE: REUSE the shell you opened before as much as possible.
-When the task is done after the tool called, talk to the user.
-When using the tool, follow the STRUCTURE and WITHOUT ANY COMMENT:
-To use default value, DO NOT add the key into body.
-```
-\u00a7tool\u00a7{tool_name(call_1)}
-\u00a7.arg1\u00a7{tool_arg1}
-\u00a7.arg2|\u00a7
-{tool_arg2_with_multiline}
-...
-\u00a7end_tool\u00a7
-......
-\u00a7tool\u00a7{tool_name(call_n)}
-\u00a7.arg1\u00a7{tool_arg1}
-...
-\u00a7end_tool\u00a7
-```
-MUST output the tool calling in EVERY TURN when you used it.
-Believe every tool calling in OUTPUT area will be responded by the REAL system.
-"""
-# As parallel as possible, such as use as many tools once as possible.
 SPLIT = "\u00a7"
 def generate_prompt(tools):
     output = ["All available tools:"]

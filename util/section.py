@@ -1,27 +1,5 @@
 SPLIT = "\u00a7"
 
-"""
-§section1§
-§subsection=§
-§section2§
-"""
-
-SECTION_PROMPT = \
-"""
-You must follow the following section format when outputing:
-```
-§SectionName|§
-Section data with multi line...
-§.SubsectionName§data in line...
-§.SubsectionName|§
-data with multi line
-data...
-§Section2§Section data in line
-```
-Notice that you can use the same name for different sections.
-You MUST NOT output `§` in your TEXT output unless it means structure.
-"""
-
 class Delta:
     def __init__(self, section, subsection, data):
         self.section = section

@@ -67,22 +67,25 @@ def start_websocket():
 
 class SubProcess:
     id = 1
-    def __init__(self, command, cwd):
+    def __init__(self, command, process_args, cwd):
         global current
         self.id = SubProcess.id
         SubProcess.id += 1
+        self.command = command
+        if len(process_args) != 0:
+            self.command += ' ' + ' '.join(process_args)
         args = connect_command \
-            + ["ws://" + host + ":" + str(port) + "/" + str(self.id), cwd, command]
+            + ["ws://" + host + ":" + str(port) + "/" + str(self.id), cwd,
+               command, *process_args]
         for i in range(len(args)):
             if args[i] == "{title}":
-                args[i] = "[AI.Subprocess] <" + str(self.id) + "> " + command
+                args[i] = "[AI.Subprocess] <" + str(self.id) + "> " + self.command
         self.process = subprocess.Popen(args)
         interact.log_to_file("\n[Subprocess] Create process: " + str(self.id) + ': ' + ' '.join(args)+"\n")
         interact.flush_log_file()
         subprocesses[self.id] = self
         current = self
         self.websocket = None
-        self.command = command
         self.danger_stdin = False
         self.cwd = cwd
         self.stdin_queue = []
@@ -156,10 +159,8 @@ class SubProcess:
 
 tools = ToolNamespace("subprocess")
 
-def add_to_platform_if_has(name, danger_stdin = False, args = ''):
+def add_to_platform_if_has(name, danger_stdin = False, args = []):
     global tools
-    if args != '':
-        args = ' ' + args
     global platform
     if shutil.which(name) is None:
         return
@@ -183,11 +184,14 @@ def add_to_platform_if_has(name, danger_stdin = False, args = ''):
                 'reason': 'Canceled by user with reason',
                 'user_followed_reason': approved
             }
-        process = SubProcess(name + args, cwd)
+        process = SubProcess(name, cwd, args)
         process.danger_stdin = danger_stdin
         process.wait_for_connect()
         if stdin is not None:
             if stdin_append_ln:
+                stdin += '\n'
+            # some problem
+            if name == "python3" and stdin_append_ln:
                 stdin += '\n'
             process.write_stdin(stdin)
         return {'result': True, 'process_id': process.id}
@@ -197,7 +201,7 @@ def add_to_platform_if_has(name, danger_stdin = False, args = ''):
         "args": {
             "cwd": "string:path?",
             "stdin": "string?|This param is RAW, it means all the thing will be passed to stdin directly.",
-            "stdin_append_ln": "bool?|If the `stdin` is whole line, " \
+            "stdin_append_ln": "bool?|If the `stdin` is whole command, " \
                 "set this to `true`, or it will just type chars in as a partial line."
         },
         "func": start
@@ -207,6 +211,7 @@ def pull_stdout():
     global process_operation
     duration = 0
     ret = {}
+    removes = []
     if process_operation:
         process_operation = False
         duration = time.time() + config.stdout_timeout
@@ -216,7 +221,6 @@ def pull_stdout():
             if check():
                 return
             time.sleep(0.05)
-            removes = []
             for process in subprocesses.values():
                 stdout = process.pull_stdout()
                 if stdout:
@@ -227,8 +231,6 @@ def pull_stdout():
                     duration = time.time() + config.stdout_timeout
                 if process.removed:
                     removes.append(process)
-            for process in removes:
-                del subprocesses[process.id]
             if time.time() > duration:
                 return
             time.sleep(0.45)
@@ -239,6 +241,8 @@ def pull_stdout():
             + subprocesses[process_id].command, {
                 'data': ret[process_id]
             }, end="stdout_end")
+    for process in removes:
+        del subprocesses[process.id]
     return ret2
 
 if sys.platform == "win32":
@@ -313,7 +317,7 @@ tools += {
     'description': 'Write to stdin to selected process',
     'args': {
         'data': 'string|This param is RAW, it means all the thing will be passed to stdin directly.',
-        "append_ln": "bool?|If the `stdin` is whole line, " \
+        "append_ln": "bool?|If the `stdin` is whole command, " \
             "set this to `true`, or it will just type chars in as a partial line."
     },
     'func': stdin_write

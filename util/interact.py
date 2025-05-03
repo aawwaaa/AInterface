@@ -1002,7 +1002,7 @@ def init_stdscr(stdscr1):
     init_progress_bar()
     update_windows()
 
-PREDICT = r"\u00a7predict\|?\u00a7(\n\u00a7\.[0-9]+\|?\u00a7.+)+(\n\u00a7predict_end\u00a7)?"
+PREDICT = r"\u00a7predict\|?\u00a7(\n?\u00a7\.[0-9]+\|?\u00a7.+)+(\n?\u00a7predict:end\u00a7)?"
 
 def handle_predict(section, message):
     global predicts
