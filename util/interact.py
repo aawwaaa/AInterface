@@ -789,6 +789,10 @@ def ask_for_user_operate(label, message) -> None:
         key = stdscr.getch()
         if handle_pad_scroll_key(key):
             continue
+        if handle_shortkey(key):
+            continue
+        if key == curses.KEY_MOUSE:
+            continue
         break
     exit_layer()
 

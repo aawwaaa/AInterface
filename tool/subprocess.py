@@ -76,7 +76,7 @@ class SubProcess:
             self.command += ' ' + ' '.join(process_args)
         args = connect_command \
             + ["ws://" + host + ":" + str(port) + "/" + str(self.id), cwd,
-               command, *process_args]
+               command] + process_args
         for i in range(len(args)):
             if args[i] == "{title}":
                 args[i] = "[AI.Subprocess] <" + str(self.id) + "> " + self.command
@@ -184,7 +184,7 @@ def add_to_platform_if_has(name, danger_stdin = False, args = []):
                 'reason': 'Canceled by user with reason',
                 'user_followed_reason': approved
             }
-        process = SubProcess(name, cwd, args)
+        process = SubProcess(name, args, cwd)
         process.danger_stdin = danger_stdin
         process.wait_for_connect()
         if stdin is not None:
@@ -218,9 +218,10 @@ def pull_stdout():
     def loop(check):
         nonlocal ret, duration
         while True:
-            if check():
-                return
-            time.sleep(0.05)
+            for _ in range(5):
+                if check():
+                    return
+                time.sleep(0.01)
             for process in subprocesses.values():
                 stdout = process.pull_stdout()
                 if stdout:
@@ -233,7 +234,10 @@ def pull_stdout():
                     removes.append(process)
             if time.time() > duration:
                 return
-            time.sleep(0.45)
+            for _ in range(45):
+                if check():
+                    return
+                time.sleep(0.01)
     interact.breakable_process("拉取stdout中...", loop)
     ret2 = ""
     for process_id in ret:

@@ -52,7 +52,6 @@ def websocket_read(websocket, write):
     try:
         while process_running:
             message = websocket.recv()
-            message = message.replace("\n", "\r\n")
             os.write(write, message.encode())
     except (websockets.ConnectionClosedError, websockets.ConnectionClosedOK):
         pass
