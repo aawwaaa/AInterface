@@ -67,19 +67,16 @@ def start_websocket():
 
 class SubProcess:
     id = 1
-    def __init__(self, command, process_args, cwd):
+    def __init__(self, command_name, exec, cwd):
         global current
         self.id = SubProcess.id
         SubProcess.id += 1
-        self.command = command
-        if len(process_args) != 0:
-            self.command += ' ' + ' '.join(process_args)
+        self.command_name = command_name
         args = connect_command \
-            + ["ws://" + host + ":" + str(port) + "/" + str(self.id), cwd,
-               command] + process_args
+            + ["ws://" + host + ":" + str(port) + "/" + str(self.id), cwd] + exec
         for i in range(len(args)):
             if args[i] == "{title}":
-                args[i] = "[AI.Subprocess] <" + str(self.id) + "> " + self.command
+                args[i] = "[AI.Subprocess] <" + str(self.id) + "> " + self.command_name
         self.process = subprocess.Popen(args)
         interact.log_to_file("\n[Subprocess] Create process: " + str(self.id) + ': ' + ' '.join(args)+"\n")
         interact.flush_log_file()
@@ -155,11 +152,13 @@ class SubProcess:
                     break
                 time.sleep(0.01)
 
-        interact.breakable_process(f"等待子进程连接: <{self.id}> {self.command}", loop)
+        interact.breakable_process(f"等待子进程连接: <{self.id}> {self.command_name}", loop)
 
 tools = ToolNamespace("subprocess")
 
-def add_to_platform_if_has(name, danger_stdin = False, args = []):
+def add_to_platform_if_has(name, danger_stdin = False, exec = None):
+    if exec is None:
+        exec = [name]
     global tools
     global platform
     if shutil.which(name) is None:
@@ -184,7 +183,7 @@ def add_to_platform_if_has(name, danger_stdin = False, args = []):
                 'reason': 'Canceled by user with reason',
                 'user_followed_reason': approved
             }
-        process = SubProcess(name, args, cwd)
+        process = SubProcess(name, exec, cwd)
         process.danger_stdin = danger_stdin
         process.wait_for_connect()
         if stdin is not None:
@@ -242,7 +241,7 @@ def pull_stdout():
     ret2 = ""
     for process_id in ret:
         ret2 += unparse("stdout", "[" + str(process_id) + "] " \
-            + subprocesses[process_id].command, {
+            + subprocesses[process_id].command_name, {
                 'data': ret[process_id]
             }, end="stdout_end")
     for process in removes:
@@ -250,19 +249,29 @@ def pull_stdout():
     return ret2
 
 if sys.platform == "win32":
-    add_to_platform_if_has("cmd", True)
-    add_to_platform_if_has("pwsh", True)
+    add_to_platform_if_has("cmd", True, exec = config.get_config('tool.subprocess.cmd_exec', [
+        'cmd.exe'
+    ], comment = '启动cmd时的执行文件路径及参数'))
+    add_to_platform_if_has("pwsh", True, exec = config.get_config('tool.subprocess.pwsh_exec', [
+        'pwsh.exe'
+    ], comment = '启动pwsh时的执行文件路径及参数'))
 elif sys.platform == "linux":
-    add_to_platform_if_has("bash", True)
+    add_to_platform_if_has("bash", True, exec = config.get_config('tool.subprocess.bash_exec', [
+        'bash',
+        '-c',
+        r"""bash --rcfile <(cat ~/.bashrc && echo "PS1='\[\e[1;93m\][AI.S] \[\e[0m\]\[\e[1;92m\]\u\[\e[0m\]:\[\e[1;94m\]\w\[\e[0m\] \$ '")"""
+    ], comment = '启动bash时的执行文件路径及参数'))
 
-add_to_platform_if_has("python3", True)
+add_to_platform_if_has("python3", True, exec = config.get_config('tool.subprocess.python3_exec', [
+    'python3'
+], comment = '启动python3时的执行文件路径及参数'))
 
 def get_processes():
     ret = []
     for process in subprocesses.values():
         ret.append({
             'process_id': process.id,
-            'command': process.command,
+            'command': process.command_name,
             'cwd': process.cwd,
             'removed': process.removed
         })
@@ -352,7 +361,7 @@ def select_process(process_id):
     return {
         'result': True,
         'process_id': process_id,
-        'command': current.command,
+        'command': current.command_name,
     }
 tools += {
     'name': 'select_process',
@@ -365,7 +374,7 @@ tools += {
 
 @check_selected
 def ask_for_user_operate(message):
-    interact.ask_for_user_operate("[" + str(current.id) + "] " + str(current.command), message)
+    interact.ask_for_user_operate("[" + str(current.id) + "] " + str(current.command_name), message)
     return {
         'result': True
     }

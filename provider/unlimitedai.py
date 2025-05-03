@@ -10,7 +10,7 @@ import platformdirs
 from provider import ProviderMetaclass
 import config
 
-endpoint = config.get_config("unlimitedai.endpoint", "http://localhost:8080", caster=lambda x: x.strip(),
+endpoint = config.get_config("provider.unlimitedai.endpoint", "http://localhost:8080", caster=lambda x: x.strip(),
                              comment = "API端点")
 
 config.update_config()

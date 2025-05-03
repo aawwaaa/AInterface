@@ -11,7 +11,12 @@ class Prompt:
     def get(self):
         return self.content
 
+main_path = ""
+def set_main_path(path):
+    global main_path
+    main_path = path
+
 def import_prompt(name):
-    with open(path.join(path.dirname(__file__), "../prompt", name + ".md")) as f:
+    with open(path.join(main_path, "prompt", name + ".md")) as f:
         return Prompt(name, f.read())
 

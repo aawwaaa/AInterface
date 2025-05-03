@@ -6,15 +6,15 @@ from provider import ProviderMetaclass  # 假设这个模块存在
 
 import config
 
-API_KEY = config.get_config("grok.api_key", "", caster=lambda x: x.strip(),
+API_KEY = config.get_config("provider.grok.api_key", "", caster=lambda x: x.strip(),
                             comment = "用于Grok的API_KEY")
-HTTP_PROXY = config.get_config("grok.http_proxy", "", caster=lambda x: x.strip(),
+HTTP_PROXY = config.get_config("provider.grok.http_proxy", "", caster=lambda x: x.strip(),
                                comment = "用于Grok的Http代理(可选)")
-MODEL = config.get_config("grok.model", "grok-3-mini-beta", caster=lambda x: x.strip(),
+MODEL = config.get_config("provider.grok.model", "grok-3-mini-beta", caster=lambda x: x.strip(),
                           comment = "Grok模型")
-REASONING_EFFORT = config.get_config("grok.reasoning_effort", "low", caster=lambda x: x.strip(),
+REASONING_EFFORT = config.get_config("provider.grok.reasoning_effort", "low", caster=lambda x: x.strip(),
                                      comment = "可用值: low/high")
-TOOLS_MODE = config.get_config("grok.tools_mode", "function_calling", caster=lambda x: x.strip(),
+TOOLS_MODE = config.get_config("provider.grok.tools_mode", "function_calling", caster=lambda x: x.strip(),
                                comment = "可用值: function_calling/section_calling")
 
 config.update_config()

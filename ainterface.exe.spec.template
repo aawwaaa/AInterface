@@ -1,29 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
 
-a = Analysis(
-    [
-        'main.py',
-        'config.py',
-        'subprocess_client.py',
-        'provider/__init__.py',
-        'provider/fakedata.py',
-        'provider/grok.py',
-        'provider/unlimitedai.py',
-        'tool/base.py',
-        'tool/fsop.py',
-        'tool/subprocess.py',
-        'util/interact.py',
-        'util/session.py',
-        'util/tools.py',
-        'util/section.py',
-    ],
+a = Analysis( [ 'main.py', ],
     pathex=[os.getcwd()],
     binaries=[],
-    datas=[(os.path.join(os.getcwd(), 'venv/lib/python3.12/site-packages/pyfiglet/fonts'), 'pyfiglet/fonts')],
+    datas=[
+        (os.path.join(os.getcwd(), 'venv/lib/python3.12/site-packages/pyfiglet/fonts'), 'pyfiglet/fonts'),
+        (os.path.join(os.getcwd(), 'prompt'), 'prompt'),
+    ],
     hiddenimports=[
         'pyfiglet.fonts',
-	'subprocess_client'
     ],
     hookspath=[],
     hooksconfig={},

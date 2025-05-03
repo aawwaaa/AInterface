@@ -8,11 +8,11 @@ if len(argv) > 1 and argv[1] == "__connect__":
 import curses
 import pyfiglet
 import time
-import re
 import argparse
 import sys
 import threading
 import queue
+import os.path as path
 
 import tool.base
 import tool.fsop
@@ -40,6 +40,8 @@ provider = None
 tools.import_tools(tool.base.tools)
 tools.import_tools(tool.fsop.tools)
 tools.import_tools(tool.subprocess.tools)
+
+prompt.set_main_path(path.dirname(__file__))
 
 SYSTEM_PROMPT = prompt.import_prompt("system")
 SECTION_PROMPT = prompt.import_prompt("section")

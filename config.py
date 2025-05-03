@@ -3,6 +3,7 @@ import platformdirs
 import os
 import os.path as path
 import toml
+import json
 
 config_file_name = path.join(platformdirs.user_config_dir("AInterface"), "config.toml")
 
@@ -38,18 +39,21 @@ def update_config():
     if not _config_changed:
         return
     _config_changed = False
-    def iterate(di, f, comment_dict = {}):
+    def iterate(di, f, comment_dict = {}, prefix = ''):
         for key, value in di.items():
             if isinstance(value, dict):
-                f.write(f"\n[{key}]\n")
-                iterate(value, f, comment_dict[key] if key in comment_dict else {})
+                f.write(f"\n[{prefix}{key}]\n")
+                iterate(value, f, comment_dict[key] if key in comment_dict else {},
+                        prefix=prefix + key + ".")
             else:
                 if key in comment_dict:
                     f.write(f"# {comment_dict[key]}\n")
                 if isinstance(value, str):
-                    f.write(f"{key} = \"{value}\"\n")
+                    f.write(f"{key} = {json.dumps(value)}\n")
                 elif isinstance(value, bool):
                     f.write(f"{key} = {"true" if value else "false"}\n")
+                elif isinstance(value, list):
+                    f.write(f"{key} = {json.dumps(value)}\n")
                 else:
                     f.write(f"{key} = {value}\n")
     with open(config_file_name, "w") as f:

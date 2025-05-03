@@ -166,7 +166,7 @@ def unparse(section, data, subsections, end = ""):
         string += SPLIT + end + SPLIT + "\n"
     return string
 
-if __name__ == "__main__" and not getattr(sys, 'frozen', False):
+if __name__ == "__main__":
     test_data = """
 §sectionA§This is data!
 §.subsection§Subsection
