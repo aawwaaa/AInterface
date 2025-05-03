@@ -297,5 +297,5 @@ def run(base=2):
     
     main(connect_target, cwd, command, args)
 
-if __name__ == "__main__":
+if __name__ == "__main__" and not getattr(sys, 'frozen', False):
     run(base=1)
