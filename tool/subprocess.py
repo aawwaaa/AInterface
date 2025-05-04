@@ -97,13 +97,13 @@ class SubProcess:
         self.removed = True
         if current == self:
             current = None
+        self.stdout_queue.put("\n\nPROCESS_REMOVED\nPROCESS_REMOVED")
 
     def pull_stdout(self):
         global current
         ret = ''.join(self.stdout_queue)
         self.stdout_queue = []
         if self.removed:
-            ret += '\n\nPROCESS REMOVED.\n'
             if current == self:
                 current = None
         return ret
@@ -245,7 +245,8 @@ def pull_stdout():
                 'data': ret[process_id]
             }, end="stdout_end")
     for process in removes:
-        del subprocesses[process.id]
+        if process.id in subprocesses:
+            del subprocesses[process.id]
     return ret2
 
 if sys.platform == "win32":
@@ -400,4 +401,15 @@ tools += {
     'func': wait_for_stdout
 }
 
-__all__ = ["tools", "start_websocket"]
+def input_data():
+    subs = {}
+    for process in subprocesses.values():
+        prefix = str('process.id') + '.'
+        subs[prefix+'command'] = process.command_name
+        subs[prefix+'cwd'] = process.cwd
+        if process == current:
+            subs[prefix+'selected'] = "true"
+    return unparse("subprocess.status", "Notice the followed data " \
+        "is the data of creating", subs)
+
+__all__ = ["tools", "start_websocket", "input_data"]

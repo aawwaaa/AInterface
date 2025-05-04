@@ -23,6 +23,7 @@ tools += {
 def set_cwd(relative):
     global cwd
     cwd = os.path.join(cwd, relative)
+    os.chdir(cwd)
     return {'result': cwd}
 tools += {
     "name": "set_cwd",
@@ -79,7 +80,7 @@ def read_file(path):
     return {'result': content}
 tools += {
     "name": "read_file",
-    "description": "Read file",
+    "description": "Read a whole file",
     "args": {
         "path": "string:pathA|Allows relative path from cwd."
     },
@@ -92,30 +93,12 @@ def write_file(path, data):
     return {'result': True}
 tools += {
     "name": "write_file",
-    "description": "Write file",
+    "description": "Write a whole file",
     "args": {
         "path": "string:pathA|Allows relative path from cwd.",
         "data": "string"
     },
     "func": write_file
-}
-
-def replace_file(path, pattern, replace):
-    with open(os.path.join(cwd, path), 'r', encoding='utf-8') as f:
-        content = f.read()
-    content = content.replace(pattern, replace)
-    with open(os.path.join(cwd, path), 'w', encoding='utf-8') as f:
-        f.write(content)
-    return {'result': True}
-tools += {
-    "name": "replace_file",
-    "description": "Replace file. Use this first.",
-    "args": {
-        "path": "string:pathA|Allows relative path from cwd.",
-        "pattern": "string|RAW text, replace all",
-        "replace": "string|RAW text"
-    },
-    "func": replace_file
 }
 
 def make_dir(path):

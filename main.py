@@ -17,6 +17,8 @@ import os.path as path
 import tool.base
 import tool.fsop
 import tool.subprocess
+import tool.memory
+import tool.edit
 from provider import ProviderMetaclass
 import util.interact as interact
 from util.session import Session
@@ -40,12 +42,17 @@ provider = None
 tools.import_tools(tool.base.tools)
 tools.import_tools(tool.fsop.tools)
 tools.import_tools(tool.subprocess.tools)
+if tool.memory.ENABLE_MEMORY:
+    tools.import_tools(tool.memory.tools)
+tools.import_tools(tool.edit.tools)
 
 prompt.set_main_path(path.dirname(__file__))
 
 SYSTEM_PROMPT = prompt.import_prompt("system")
 SECTION_PROMPT = prompt.import_prompt("section")
 TOOL_PROMPT = prompt.import_prompt("tool")
+if tool.memory.ENABLE_MEMORY:
+    MEMORY_PROMPT = prompt.import_prompt("memory")
 
 args = {}
 
@@ -74,6 +81,8 @@ def init():
     if provider.mode == "section_calling":
         TOOL_PROMPT.apply("available_tools", tools.generate_prompt())
         msg += TOOL_PROMPT.get()
+    if tool.memory.ENABLE_MEMORY:
+        msg += MEMORY_PROMPT.get()
     session.add_message("system", msg)
     # if provider.mode == "section_calling":
     #     tools.add_example_tool()
@@ -120,11 +129,11 @@ def main(stdscr):
                 session.add_message("system", command[1:])
                 continue
             session.add_message("system", "Continue your output...")
+            write_system()
             request_loop()
             continue
-        data = section.unparse("user", command, {})
-        data += tool.fsop.input_data()
-        session.add_message("user", data)
+        session.add_message("user", command)
+        write_system(input_data = True)
         request_loop()
 
 def save_session_implement():
@@ -134,9 +143,28 @@ def save_session_implement():
             f.write(line)
     return filename
 
+def write_system(input_data=False):
+    global tool_results, message_length_sum
+    msg = ""
+    if tool_results:
+        message_length_sum += len(tool_results)
+        msg += tool_results
+        tool_results = ""
+    stdout = tool.subprocess.pull_stdout()
+    if stdout:
+        message_length_sum += len(stdout)
+        msg += stdout
+    if input_data:
+        msg += tool.fsop.input_data()
+        msg += tool.subprocess.input_data()
+    if msg == "":
+        return
+    session.add_message("system", msg)
+
 message = ""
 has_output = False
 tool_results = ""
+tool_next_turn = False
 tool_calls = []
 tool_call_ids = []
 tool_result_objects = []
@@ -147,7 +175,9 @@ def handle_tool_call(call):
     global tool_calls
     tool_calls += [call]
 def handle_tool_call_post(call):
-    name, args, result_obj, id, content = tools.handle_openai_tool_calling(call)
+    global tool_next_turn
+    next_turn, name, args, result_obj, id, content = tools.handle_openai_tool_calling(call)
+    tool_next_turn = tool_next_turn or next_turn
     tool_call_ids.append(id)
     tool_result_objects.append({
         'type': 'message',
@@ -202,7 +232,7 @@ def handle_output(chars, dump_all = False, handle_tools=True):
         write_output(section_reader.dump(), handle_tools)
 def write_output(sections, handle_tools):
     global message, has_output, tool_results, message_length_sum
-    global tool_call_index
+    global tool_call_index, tool_next_turn
     for delta in sections:
         if delta.section == "predict":
             if not isinstance(delta, section.StructureDelta):
@@ -212,7 +242,8 @@ def write_output(sections, handle_tools):
             if isinstance(delta, section.StructureDelta):
                 continue
             if handle_tools and provider.mode == "section_calling":
-                result, result_str = tools.handle_tool(delta)
+                next_turn, result, result_str = tools.handle_tool(delta)
+                tool_next_turn = tool_next_turn or next_turn
                 tool_results += result_str
                 session.add_tool_result_binded(str(tool_call_index), result)
             else:
@@ -250,11 +281,12 @@ def execute_thread():
         lambda x: message_queue.put(("output", x)))
     return finish
 def wait_for_execute_done(thread):
+    global message_queue
     while thread.is_alive():
         if interact.is_required_interrupt():
             interact.remove_required_interrupt()
             provider.interrupt()
-            thread.terminate()
+            message_queue = None
             return {'finish_reason': 'interrupted'}
         try:
             data = message_queue.get(timeout=0.1)
@@ -286,20 +318,18 @@ class ReturnThread(threading.Thread):
             self.result = self._target(*self._args, **self._kwargs)
 def request_loop():
     global message, has_output, response, message_length_sum, tool_results
-    global message_chars, tool_call_index
-    tool_results += tool.subprocess.pull_stdout()
-    if tool_results:
-        message_length_sum += len(tool_results)
-        session.add_message("system", tool_results)
-    tool_results = ""
+    global message_chars, tool_call_index, tool_next_turn, message_queue
     interact.set_length_bar_value(message_length_sum)
     while True:
+        if message_queue is None:
+            message_queue = queue.Queue()
         section_reader.reset()
         tool_result_objects.clear()
         tool_call_ids.clear()
         tool_calls.clear()
         message = ""
         has_output = False
+        tool_next_turn = False
         tool_call_index = 0
         executing_thread = ReturnThread(target=execute_thread, daemon=True)
         executing_thread.start()
@@ -318,13 +348,9 @@ def request_loop():
         if finish["finish_reason"] != "stop":
             interact.output_error("\nTerminated: " + finish["finish_reason"])
             break
-        tool_results += tool.subprocess.pull_stdout()
-        if not tool_results and len(tool_result_objects) == 0:
+        write_system()
+        if not tool_next_turn:
             break
-        if tool_results:
-            message_length_sum += len(tool_results)
-            session.add_message("system", tool_results)
-            tool_results = ""
 
 
 if __name__ == "__main__":

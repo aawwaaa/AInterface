@@ -89,6 +89,7 @@ class Tool:
         self.description = options["description"]
         self.args = {}
         self.func = options["func"]
+        self.next_turn = options.get("next_turn", True)
         properties = {}
         required = []
         for key, text in options["args"].items():
@@ -172,11 +173,12 @@ class Tools:
             result = self.tools[name].func(**args)
             tool_using_result(result)
             result = self.append_result(name, args, result)
-            return result, unparse("tool_result", name, result, end="tool_result_end")
+            return self.tools[name].next_turn, result, \
+                unparse("tool_result", name, result, end="tool_result_end")
         except Exception:
             msg = traceback.format_exc()
             tool_using_error(msg)
-            return {"error": msg}, unparse("tool_error", msg, {}, 
+            return True, {"error": msg}, unparse("tool_error", msg, {}, 
                                            end="tool_error_end")
 
     def handle_openai_tool_calling(self, call):
@@ -190,12 +192,14 @@ class Tools:
             result = self.tools[name].func(**args)
             tool_using_result(result)
             result = self.append_result(name, args, result)
-            return name, args, result, call.id, json.dumps(result)
+            return self.tools[name].next_turn, name, args, \
+                result, call.id, json.dumps(result)
         except Exception:
             msg = traceback.format_exc()
             tool_using_error(msg)
             error = {"error": msg}
-            return name, args, error, call.id, json.dumps(error)
+            return self.tools[name].next_turn, name, args, \
+                error, call.id, json.dumps(error)
 
     def add_example_tool(self):
         add_example_tool(self)
