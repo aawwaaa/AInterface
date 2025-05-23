@@ -87,6 +87,7 @@ def get_shortkey_str() -> str:
 
     return shortkey_str
 
+shortkeys = [i for i in range(32)] + [curses.KEY_RESIZE]
 
 def handle_shortkey(key):
     global required_interrupt
@@ -97,7 +98,12 @@ def handle_shortkey(key):
     if key == ord('R') - ord('A') + 1:
         name = save_session_implement()
         announce(f"保存成功：{name}")
-        return
+        return True
+    if key == curses.KEY_RESIZE:
+        init_status_bar()
+        refresh()
+        return True
+    return False
 
 def is_required_interrupt() -> bool:
     return required_interrupt
@@ -612,7 +618,9 @@ def get_user_input(embed: bool = True, label = "") -> str:
                 redraw_input()
                 continue
         
-        if handle_pad_scroll_key(key) or key == curses.KEY_MOUSE:
+        if key in shortkeys and handle_shortkey(key):
+            pass
+        elif handle_pad_scroll_key(key) or key == curses.KEY_MOUSE:
             pass
         elif key == curses.KEY_UP:
             current_wrapped_idx, line_idx, start_pos, end_pos = get_current_wrapped_line()
@@ -732,8 +740,6 @@ def get_user_input(embed: bool = True, label = "") -> str:
                 )
                 current_pos += len(predict)
                 redraw_input()
-        elif 0 < key < 32:
-            handle_shortkey(key)
     
     exit_layer()
     for line in lines:
