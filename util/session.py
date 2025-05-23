@@ -104,7 +104,7 @@ def unparse(array):
     yield split + "\n"
     yield subsplit + "\n"
     for item in array:
-        yield item['id'] + "\n"
+        yield str(item['id']) + "\n"
         for key in item:
             if key == 'id':
                 continue

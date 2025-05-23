@@ -1,5 +1,6 @@
 import traceback
 import json
+import re
 
 from util.interact import tool_using, tool_using_result, tool_using_error
 from util.section import unparse
@@ -42,6 +43,7 @@ class ToolArg:
         self.description = options["description"]
         
         self.optional = False
+        self.default_value = options.get('default_value', None)
         self.feedback = False
         while self.type[-1] in ("?", "A"):
             flag = self.type[-1]
@@ -62,7 +64,7 @@ class ToolArg:
 
     def check_arg(self, arg):
         if arg is None:
-            if not self.optional:
+            if not self.optional and self.default_value is None:
                 return "Missing argument"
             # Do nothing
             return None
@@ -70,18 +72,30 @@ class ToolArg:
             if ".." in arg:
                 return "Insecure path: " + arg
         if self.type == "bool":
-            if arg not in (True, False, "true", "false"):
+            if arg not in (True, False, "true", "false", 'True', 'False'):
                 return "Invalid bool: " + arg
+        if ':enum' in self.type:
+            enums = [s.strip() for s in self.type[self.type.find(':enum') + 5:][1:-1].split(",")]
+            if arg not in enums:
+                return "Not in enum values: " + arg
         return None
 
     def cast_arg(self, arg):
+        if arg is None and self.default_value is not None:
+            arg = self.default_value
+        if arg is None and self.optional:
+            return None, True
         if self.type == "bool":
-            return bool(arg)
+            if arg == 'true':
+                return True, False
+            if arg == 'false':
+                return False, False
+            return bool(arg), False
         if self.type == "int":
-            return int(arg)
+            return int(arg), False
         if self.type == "float":
-            return float(arg)
-        return arg
+            return float(arg), False
+        return arg, False
 
 class Tool:
     def __init__(self, options):
@@ -96,10 +110,15 @@ class Tool:
             if isinstance(text, str):
                 text += "|"
                 t, description, *_ = text.split("|")
+                value = None
+                if '=' in t:
+                    t, *value = t.split("=")
+                    value = '='.join(value) if len(value) != 0 else None
                 arg = ToolArg({
                     "name": key,
                     "type": t,
-                    "description": description
+                    "description": description,
+                    'default_value': value
                 })
             else:
                 arg = ToolArg(text)
@@ -153,8 +172,9 @@ class Tools:
     def cast_args(self, name, args):
         tool = self.tools[name]
         for arg in tool.args.values():
-            if arg.name in args:
-                args[arg.name] = arg.cast_arg(args[arg.name])
+            value, ret = arg.cast_arg(args.get(arg.name, None))
+            if not ret:
+                args[arg.name] = value
         return args
 
     def append_result(self, name, args, result):
@@ -165,8 +185,10 @@ class Tools:
     
     def handle_tool(self, section):
         try:
-            name = section.data
+            name = strip_comments(section.data)
             args = section.subsections
+            for key in args:
+                args[key] = strip_comments(args[key])
             tool_using(name, args)
             self.check_args(name, args)
             args = self.cast_args(name, args)
@@ -258,4 +280,10 @@ def to_openai_tools(self):
         array += [tool.formatted]
     self.openai_tools = array
     return array
+
+COMMENT = re.compile(r" *~REM~.*")
+def strip_comments(data):
+    while (match := COMMENT.search(data)):
+        data = data[:match.start()] + data[match.end():]
+    return data
 

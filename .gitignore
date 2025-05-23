@@ -175,3 +175,6 @@ cython_debug/
 
 # Exported sessions
 *.session.txt
+
+# Hidden py files
+.*.py

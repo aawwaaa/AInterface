@@ -267,22 +267,22 @@ add_to_platform_if_has("python3", True, exec = config.get_config('tool.subproces
     'python3'
 ], comment = '启动python3时的执行文件路径及参数'))
 
-def get_processes():
-    ret = []
-    for process in subprocesses.values():
-        ret.append({
-            'process_id': process.id,
-            'command': process.command_name,
-            'cwd': process.cwd,
-            'removed': process.removed
-        })
-    return ret
-tools += {
-    'name': 'get_processes',
-    'description': 'Get list of running processes',
-    'args': {},
-    'func': get_processes
-}
+# def get_processes():
+#     ret = []
+#     for process in subprocesses.values():
+#         ret.append({
+#             'process_id': process.id,
+#             'command': process.command_name,
+#             'cwd': process.cwd,
+#             'removed': process.removed
+#         })
+#     return ret
+# tools += {
+#     'name': 'get_processes',
+#     'description': 'Get list of running processes',
+#     'args': {},
+#     'func': get_processes
+# }
 
 def check_selected(func):
     def wrapper(*args, **kwargs):

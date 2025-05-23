@@ -93,7 +93,7 @@ def init():
     if args.exported_file:
         with open(args.exported_file, "r") as f:
             session.load_session(f.readlines())
-            session.add_message("system", "This session is loaded from a file, ALL the processes ARE LOST!")
+            session.add_message("system", "This session is loaded from a file, ALL the processes AND fds ARE LOST!")
             global message_length_sum
             message_length_sum = sum([len(message["content"]) for message in session.get_messages()])
             interact.set_length_bar_value(message_length_sum)

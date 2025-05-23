@@ -1,109 +1,144 @@
 import os
-import subprocess
-import re
-
 from util.tools import ToolNamespace
-import util.section as section
+from util.edit import FileDescriptor
 from tool.fsop import get_cwd_str
-import util.edit
+
+import util.interact as interact
 
 tools = ToolNamespace("edit")
 
-def format_lines(lines, begin, end):
-    output = "~~~~~~ " + str(begin+1) + " ======\n"
-    for i in range(begin, end):
-        output += lines[i]
-    output += "~~~~~~ " + str(end) + " ======"
-    return output
+fds = {}
+current = None
 
-def find(path, pattern, regex=False, line_range=15):
-    with open(path, "r") as f:
-        lines = f.readlines()
-        found = []
-        for index in range(len(lines)):
-            if regex:
-                if re.search(pattern, lines[index]):
-                    found.append(index)
-            else:
-                if pattern in lines[index]:
-                    found.append(index)
-        output = []
-        line_range = int(line_range/2)
-        for index in range(len(found)):
-            line = found[index]
-            begin = max(0, line - line_range)
-            end = min(len(lines), line + line_range)
-            found[index] = (begin, end)
-            index += 1
-        ranges = []
-        current = None
-        for begin, end in found:
-            if current is None:
-                current = (begin, end)
-                continue
-            if begin > current[1]:
-                ranges.append(current)
-                current = (begin, end)
-                continue
-            current = (current[0], end)
-        if current is not None:
-            ranges.append(current)
-        for begin, end in ranges:
-            output.append(format_lines(lines, begin, end))
-        return {
-            'result': '\n......\n'.join(output)
-        }
-    return {
-        'error': 'Failed.'
-    }
+def open(path):
+    global current
+    path = os.path.join(get_cwd_str(), path)
+    fd = FileDescriptor(path)
+    fds[fd.id] = fd
+    current = fd
+    return {'result': True, **current.status()}
 tools += {
-    "name": "find",
-    "description": "Find contents of a file",
-    "args": {
-        "path": "string:pathA|The path of the file",
-        "pattern": "string|The pattern to search for",
-        "regex": "bool?|Whether the pattern is a regular expression, notice the pattern is as RAW regex",
-        "line_range": "int?|The range of lines to show, default is 20"
+    'name': 'open',
+    'description': 'Open a file as fd, then select it',
+    'args': {
+        'path': 'string:path'
     },
-    "func": find
+    'func': open
 }
 
-def get_lines(path, line, line_range=15):
-    with open(path, "r") as f:
-        lines = f.readlines()
-        line_range = int(line_range/2)
-        begin = max(0, line - line_range)
-        end = min(len(lines), line + line_range)
+def select(id):
+    global current
+    if id not in fds:
         return {
-            'result': format_lines(lines, begin, end)
+            'result': False,
+            'error': 'Fd not found.'
         }
-    return {
-        'error': 'Failed.'
-    }
+    current = fds[id]
+    return {'result': True, **current.status()}
 tools += {
-    "name": "get_lines",
-    "description": "Get lines of a file",
-    "args": {
-        "path": "string:pathA|The path of the file",
-        "line": "int|The line to get",
-        "line_range": "int?|The range of lines to show, default is 20"
+    'name': 'select',
+    'description': 'Select a fd',
+    'args': {
+        'id': 'int'
     },
-    "func": get_lines
+    'func': select
 }
 
-def edit(path, operation):
-    util.edit.edit(path, operation)
+def select_wrapper(func):
+    def __wrapper(*args, **kwargs):
+        if current is None:
+            return {'result': False, 'error': 'No fd selected.'}
+        return func(current, *args, **kwargs)
+    return __wrapper
+
+@select_wrapper
+def close(fd):
+    del fds[fd.id]
     return {'result': True}
-
 tools += {
-    "name": "edit",
-    "description": "Edit a file",
-    "args": {
-        "path": "string:pathA|The path of the file",
-        "operation": "string|The operation to perform, as followed guidelines."
-    },
-    "func": edit
+    'name': 'close',
+    'description': 'Close selected fd.',
+    'args': { },
+    'func': close
 }
 
+@select_wrapper
+def status(fd):
+    return fd.status()
+tools += {
+    'name': 'status',
+    'description': 'Get the status of selected fd.',
+    'args': { },
+    'func': status
+}
+@select_wrapper
+def read(fd, text_range):
+    return fd.read(text_range)
+tools += {
+    'name': 'read',
+    'description': 'Read the lines near cursor for selected fd.',
+    'args': {
+        'text_range': 'int=5|The range(lines) of the text section.'
+    },
+    'func': read
+}
+@select_wrapper
+def find(fd, pattern, regex, text_range):
+    return fd.find_get(pattern, regex, text_range)
+tools += {
+    'name': 'find',
+    'description': 'Get the lines near pattern for selected fd.',
+    'args': {
+        'pattern': 'string|Raw data for string or regex.',
+        'regex': 'bool=false|Use the regex to find',
+        'text_range': 'int=3|The range(lines) of the text section.'
+    },
+    'func': find
+}
+@select_wrapper
+def write(fd, data, append_newline):
+    if append_newline:
+        data += '\n'
+    return fd.write(data)
+tools += {
+    'name': 'write',
+    'description': 'Write the lines replacing selected text by cursor for selected fd.',
+    'args': {
+        'data': 'string',
+        'append_newline': 'bool=false'
+    },
+    'func': write
+}
 
-__all__ = ["tools"]
+@select_wrapper
+def seek(fd, pattern, pattern_append_newline, regex, position, select_second):
+    if pattern_append_newline:
+        pattern += '\n'
+    return fd.seek(pattern, regex, position, select_second)
+tools += {
+    'name': 'seek',
+    'description': 'Move the cursor by pattern for selected fd.',
+    'args': {
+        'pattern': 'string|Raw data for string or regex.',
+        'pattern_append_newline': 'bool=false',
+        'regex': 'bool=false|Use the regex to find',
+        'position': 'string:enum[before, first, last, after, pattern]=after|The position of cursor. '
+            'before: <||>[pattern\\n], first: <|[pattern|>\\n], last: [pattern\\n<|]|>, after: [pattern\\n]\\n<||>after line'
+            ', pattern: <|[pattern\\n]|>',
+        'select_second': 'bool=false|Only change the section end cursor.'
+    },
+    'func': seek
+}
+@select_wrapper
+def goto(fd, row, col, select_second):
+    return fd.goto(row, col, select_second)
+tools += {
+    'name': 'goto',
+    'description': 'Move the cursor by row and col for selected fd.',
+    'args': {
+        'row': 'int|The line number.',
+        'col': 'int=0',
+        'select_second': 'bool=false|Only change the section end cursor.'
+    },
+    'func': goto
+}
