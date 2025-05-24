@@ -72,6 +72,7 @@ def init():
     import provider.fakedata
     import provider.grok
     import provider.unlimitedai
+    import provider.openai_provider
     provider = ProviderMetaclass.providers[provider_name]()
 
     SYSTEM_PROMPT.apply("provider", provider.name)
