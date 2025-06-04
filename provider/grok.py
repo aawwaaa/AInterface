@@ -62,7 +62,7 @@ class Provider(metaclass=ProviderMetaclass):
                 if choice.finish_reason == "tool_calls":
                     for call in choice.delta.tool_calls:
                         self.tool_call_handler(call)
-                if hasattr(choice.delta, "reasoning_content"):
+                elif hasattr(choice.delta, "reasoning_content"):
                     if write_fake_data:
                         f.write("T:" + json.dumps(choice.delta.reasoning_content) + "\n")
                     on_thinking(choice.delta.reasoning_content)

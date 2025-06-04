@@ -31,7 +31,7 @@ class ToolNamespace:
         if isinstance(tool, dict):
             tool = Tool(tool)
         if isinstance(tool, Tool):
-            tool.name = self.name + "." + tool.name
+            tool.name = self.name + "-" + tool.name
             tool.formatted["function"]["name"] = tool.name
             self.tools.append(tool)
         return self
@@ -53,14 +53,26 @@ class ToolArg:
             elif flag == "A":
                 self.feedback = True
 
-        self.formatted = {
-            self.name: {
-                "type": self.type,
-                "description": self.description
-            }
-        }
+        self.formatted = self.get_formatted()
         if "formatted" in options:
             self.formatted |= options["formatted"]
+
+    def get_formatted(self):
+        ret = {
+            "type": self.type.split(':')[0],
+            "description": self.description
+        }
+        if ret['type'] == 'int':
+            ret['type'] = 'number'
+        if ret['type'] == 'bool':
+            ret['type'] = 'boolean'
+
+        if ':enum' in self.type:
+            enums = [s.strip() for s in self.type[self.type.find(':enum') + 5:][1:-1].split(",")]
+            ret["enum"] = enums
+        return {
+            self.name: ret
+        }
 
     def check_arg(self, arg):
         if arg is None:

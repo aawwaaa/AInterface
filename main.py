@@ -337,6 +337,20 @@ def request_loop():
         finish = wait_for_execute_done(executing_thread)
         handle_output('', dump_all=True)
         if provider.mode == "function_calling":
+            if len(tool_calls) != 0:
+                tool_result_objects.append({
+                    'type': 'message',
+                    'role': 'assistant',
+                    'tool_calls': list(map(lambda x: {
+                        'id': x.id,
+                        'name': "",
+                        'type': 'function',
+                        'function': {
+                            'name': x.function.name,
+                            'arguments': x.function.arguments
+                        }
+                    }, tool_calls))
+                })
             for call in tool_calls:
                 handle_tool_call_post(call)
             session.add_message("assistant", message, {
@@ -364,5 +378,5 @@ if __name__ == "__main__":
         pass
     try:
         curses.endwin()
-    except curses.Error:
+    except curses.error:
         pass

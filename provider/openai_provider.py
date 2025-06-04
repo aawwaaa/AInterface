@@ -23,7 +23,14 @@ MAX_TOKENS = config.get_config("provider.openai.max_tokens", 4096, caster=int,
 
 config.update_config()
 
-write_fake_data = False
+class OpenaiToolCall:
+    def __init__(self, id, name, args):
+        self.id = id
+        self.function = OpenaiToolCall.OpenaiToolCallFunction(name, args)
+    class OpenaiToolCallFunction:
+        def __init__(self, name, arguments):
+            self.name = name
+            self.arguments = arguments
 
 class Provider(metaclass=ProviderMetaclass):
     name = "openai"
@@ -49,8 +56,6 @@ class Provider(metaclass=ProviderMetaclass):
         self.tool_call_handler = tool_call_handler
 
     def execute(self, options, on_thinking, on_outputing):
-        if write_fake_data:
-            f = open("fakedata_openai.txt", "w")
         try:
             # 准备请求参数
             request_params = {
@@ -64,6 +69,19 @@ class Provider(metaclass=ProviderMetaclass):
             # 如果有工具，添加工具参数
             if self.tools:
                 request_params["tools"] = self.tools
+                request_params["function_call"] = "auto"
+
+                tool_call_id = ""
+                tool_call_name = ""
+                tool_call_args = ""
+
+                def run_tool():
+                    nonlocal tool_call_id, tool_call_name, tool_call_args
+                    self.tool_call_handler(OpenaiToolCall(tool_call_id, tool_call_name, tool_call_args))
+                    tool_call_id = ""
+                    tool_call_name = ""
+                    tool_call_args = ""
+                    on_outputing("\n")
             
             # 使用OpenAI客户端发送请求
             response = self.client.chat.completions.create(**request_params)
@@ -72,22 +90,30 @@ class Provider(metaclass=ProviderMetaclass):
                 choice = chunk.choices[0]
                 
                 # 处理工具调用
-                if choice.finish_reason == "tool_calls":
-                    if hasattr(choice.delta, 'tool_calls') and choice.delta.tool_calls:
-                        for call in choice.delta.tool_calls:
-                            self.tool_call_handler(call)
+                if choice.delta.tool_calls:
+                    for call in choice.delta.tool_calls:
+                        if call.id is not None:
+                            if tool_call_id != "":
+                                run_tool()
+                            tool_call_id = call.id
+                            on_outputing("Tool call: " + call.id + " -> ")
+                        if call.function.name is not None:
+                            tool_call_name = call.function.name
+                            on_outputing(call.function.name + "\n")
+                        if call.function.arguments is not None:
+                            tool_call_args += call.function.arguments
+                            on_outputing(call.function.arguments)
                 
                 # 处理常规内容
                 if hasattr(choice.delta, "content") and choice.delta.content is not None:
-                    if write_fake_data:
-                        f.write("C:" + json.dumps(choice.delta.content) + "\n")
                     on_outputing(choice.delta.content)
                 
                 # 处理完成原因
                 elif choice.finish_reason is not None:
-                    if write_fake_data:
-                        f.write("F:" + json.dumps(choice.finish_reason) + "\n")
-                        f.close()
+                    if tool_call_id != "":
+                        run_tool()
+                    if choice.finish_reason == "tool_calls":
+                        return {"finish_reason": "stop"}
                     return {"finish_reason": choice.finish_reason}
             
             return {"finish_reason": "stop"}
@@ -96,11 +122,7 @@ class Provider(metaclass=ProviderMetaclass):
             return {"finish_reason": "interrupted"}
         except Exception as e:
             error_msg = traceback.format_exc()
-            on_thinking(f"\nOpenAI Provider Error: {str(e)}")
-            return {"finish_reason": f"Error: {str(e)}"}
-        finally:
-            if write_fake_data and 'f' in locals():
-                f.close()
+            return {"finish_reason": f"Error: {error_msg}"}
 
     def interrupt(self):
         # OpenAI client handles interruption automatically when the iterator is broken
